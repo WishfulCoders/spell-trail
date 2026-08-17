@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   BADGES,
   ROUND_LENGTH,
+  ROUND_LENGTH_OPTIONS,
   SESSION_BONUS,
   awardAnswer,
   blankSentence,
@@ -26,6 +27,9 @@ import {
   removeProfile,
   renameProfile,
   saveStore,
+  setRoundLength,
+  setVoice,
+  updatePack,
   updateProfile,
 } from './profiles.js'
 import {
@@ -37,13 +41,17 @@ import {
   ownedCompanions,
   ownsCompanion,
 } from './shop.js'
-import { onVoicesChanged, speak, speechReady, stopSpeaking } from './speech.js'
+import { bestVoiceUri, listVoices, onVoicesChanged, speak, speechReady, stopSpeaking } from './speech.js'
+import { loadBackup, saveBackup } from './backup.js'
 import { MAX_PACK_WORDS, buildPackWords, parseEntries } from './wordgen.js'
 import { DEFAULT_TIER_ID, WORD_TIERS } from './words.js'
 
 // Chrome fires `voiceschanged` once, often before React has mounted and
 // subscribed — so the event alone leaves the app believing it has no speech.
 // Poll briefly as well, then give up and fall back to written clues.
+// Change this one line to point the heart somewhere else.
+export const SUPPORT_URL = 'https://buymeacoffee.com/wishfulcoders'
+
 const VOICE_POLL_MS = 250
 const VOICE_GIVE_UP_MS = 4000
 
@@ -109,7 +117,7 @@ function Home({ profile, selection, source, onSelect, onStart, onShowRewards, on
   const { progress } = profile
   const level = levelFromXp(progress.xp)
   const accuracy = progress.wordsPracticed ? Math.round((progress.correctAnswers / progress.wordsPracticed) * 100) : 0
-  const roundLength = Math.min(ROUND_LENGTH, source.words.length)
+  const roundLength = Math.min(profile.roundLength || ROUND_LENGTH, source.words.length)
   return (
     <main className="home-shell">
       <section className="welcome-card">
@@ -198,7 +206,7 @@ function Home({ profile, selection, source, onSelect, onStart, onShowRewards, on
   )
 }
 
-function ListenButton({ word, sentence, audio }) {
+function ListenButton({ word, sentence, audio, voiceUri }) {
   if (!audio) {
     return (
       <p className="audio-notice">
@@ -208,15 +216,15 @@ function ListenButton({ word, sentence, audio }) {
     )
   }
   return (
-    <button className="listen-button" type="button" onClick={() => speak(`${word}. ${sentence}`)}>
+    <button className="listen-button" type="button" onClick={() => speak(`${word}. ${sentence}`, { voiceUri })}>
       <span className="sound-waves" aria-hidden="true"><i /><i /><i /><i /></span>
       <span><b>Hear the word</b><small>Tap as many times as you need</small></span>
     </button>
   )
 }
 
-function Game({ source, progress, onProgress, onComplete, onExit, audio }) {
-  const [base] = useState(() => buildRound({ words: source.words, length: ROUND_LENGTH, audio }))
+function Game({ source, progress, roundLength, onProgress, onComplete, onExit, audio, voiceUri }) {
+  const [base] = useState(() => buildRound({ words: source.words, length: roundLength, audio }))
   const [retries, setRetries] = useState([])
   const [index, setIndex] = useState(0)
   const [feedback, setFeedback] = useState(null)
@@ -230,12 +238,12 @@ function Game({ source, progress, onProgress, onComplete, onExit, audio }) {
 
   useEffect(() => {
     if (!audio) return undefined
-    const timer = window.setTimeout(() => speak(`${item.word}. ${item.sentence}`), 350)
+    const timer = window.setTimeout(() => speak(`${item.word}. ${item.sentence}`, { voiceUri }), 350)
     return () => {
       window.clearTimeout(timer)
       stopSpeaking()
     }
-  }, [item, audio])
+  }, [item, audio, voiceUri])
 
   function answer(isCorrect, choice) {
     if (feedback) return
@@ -254,7 +262,7 @@ function Game({ source, progress, onProgress, onComplete, onExit, audio }) {
     }
 
     setFeedback({ isCorrect, choice, xp: xpEarned, queued })
-    if (isCorrect && audio) speak('Nice work!', 0.9)
+    if (isCorrect && audio) speak('Nice work!', { rate: 0.9, voiceUri })
   }
 
   function next() {
@@ -297,7 +305,7 @@ function Game({ source, progress, onProgress, onComplete, onExit, audio }) {
           <span className="mode-icon" aria-hidden="true">{mode.icon}</span>
           <div><span className="soft-label">{mode.eyebrow}</span><h1>{mode.title}</h1></div>
         </div>
-        <ListenButton word={item.word} sentence={item.sentence} audio={audio} />
+        <ListenButton word={item.word} sentence={item.sentence} audio={audio} voiceUri={voiceUri} />
         <p className="sentence"><span>“</span>{blankSentence(item.sentence, item.word)}<span>”</span></p>
         <div className="question-area">
           <Question key={index} item={item} onAnswer={answer} feedback={feedback} />
@@ -310,7 +318,7 @@ function Game({ source, progress, onProgress, onComplete, onExit, audio }) {
               <p className="answer-line">
                 <span>The word is</span>
                 <strong>{item.word}</strong>
-                {audio ? <button type="button" onClick={() => speak(item.word)}>Hear it again</button> : null}
+                {audio ? <button type="button" onClick={() => speak(item.word, { voiceUri })}>Hear it again</button> : null}
               </p>
               {feedback.queued ? <small className="queued-note">We will come back to this one before the trail ends.</small> : null}
             </div>
@@ -443,9 +451,170 @@ function ConfirmButton({ className = 'quiet-button', label, confirmLabel, onConf
   )
 }
 
-function PackForm({ onAdd }) {
-  const [name, setName] = useState('')
-  const [text, setText] = useState('')
+function SessionLength({ profile, onRoundLength }) {
+  const current = profile.roundLength || ROUND_LENGTH
+  return (
+    <section className="family-card">
+      <h2>Words per session</h2>
+      <p className="field-help">
+        Shorter trails are easier to finish on a busy night. A missed word still comes back for a
+        second look, so a trail can run slightly longer than the number you pick.
+      </p>
+      <div className="length-row" role="group" aria-label="Words per session">
+        {ROUND_LENGTH_OPTIONS.map((option) => (
+          <button
+            className={`length-choice ${current === option ? 'selected' : ''}`}
+            type="button"
+            key={option}
+            aria-pressed={current === option}
+            onClick={() => onRoundLength(option)}
+          >
+            <b>{option}</b>
+            <small>{option <= 3 ? 'quick' : option <= 5 ? 'short' : option <= 8 ? 'normal' : option <= 12 ? 'long' : 'marathon'}</small>
+          </button>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function VoicePicker({ store, audio, onVoice }) {
+  const voices = useMemo(() => (audio ? listVoices() : []), [audio])
+  const chosen = store.settings?.voiceUri || bestVoiceUri()
+  if (!audio || !voices.length) {
+    return (
+      <section className="family-card">
+        <h2>Reading voice</h2>
+        <p className="field-help">This browser has no speech voices installed, so trails show written clues instead.</p>
+      </section>
+    )
+  }
+  return (
+    <section className="family-card">
+      <h2>Reading voice</h2>
+      <p className="field-help">
+        Browsers ship several voices and the one they pick by default is usually the most robotic.
+        Spell Trail picks the best it can find — change it here if another sounds clearer.
+      </p>
+      <div className="voice-row">
+        <select
+          aria-label="Reading voice"
+          value={chosen || ''}
+          onChange={(event) => onVoice(event.target.value)}
+        >
+          {voices.map((voice) => (
+            <option value={voice.uri} key={voice.uri}>{voice.name} ({voice.lang})</option>
+          ))}
+        </select>
+        <button
+          className="check-button"
+          type="button"
+          onClick={() => speak('The word is necessary. Water is necessary on a long hike.', { voiceUri: chosen })}
+        >
+          Hear it
+        </button>
+      </div>
+    </section>
+  )
+}
+
+function BackupPanel({ store, onRestore }) {
+  const [code, setCode] = useState('')
+  const [status, setStatus] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const savedCode = store.backupCode || null
+
+  async function run(action) {
+    setBusy(true)
+    setStatus(null)
+    try {
+      await action()
+    } catch (error) {
+      setStatus({ tone: 'bad', text: error.message })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <section className="family-card">
+      <h2>Back up progress</h2>
+      <p className="field-help">
+        There is no account and no password. Backing up gives you a code — keep it somewhere safe,
+        and enter it on another device to bring everything across. Anyone with the code can read
+        that backup, so treat it like a key.
+      </p>
+
+      <div className="backup-actions">
+        <button
+          className="check-button"
+          type="button"
+          disabled={busy}
+          onClick={() => run(async () => {
+            const result = await saveBackup(store, savedCode)
+            onRestore({ backupCode: result.code })
+            setStatus({ tone: 'good', text: savedCode ? 'Backup updated.' : 'Backup created.' })
+          })}
+        >
+          {busy ? 'Working…' : savedCode ? 'Update my backup' : 'Back up now'}
+        </button>
+        {savedCode ? <code className="backup-code">{savedCode}</code> : null}
+      </div>
+
+      <form
+        className="restore-row"
+        onSubmit={(event) => {
+          event.preventDefault()
+          run(async () => {
+            const restored = await loadBackup(code)
+            onRestore({ profiles: restored.profiles, activeId: restored.activeId, backupCode: restored.code })
+            setCode('')
+            setStatus({ tone: 'good', text: `Restored ${restored.profiles.length} player${restored.profiles.length === 1 ? '' : 's'}.` })
+          })
+        }}
+      >
+        <label htmlFor="restore-code">Restore from a code</label>
+        <input
+          id="restore-code"
+          value={code}
+          onChange={(event) => setCode(event.target.value)}
+          placeholder="otter-summit-ridge-4821"
+          autoComplete="off"
+          spellCheck="false"
+        />
+        <button className="quiet-button" type="submit" disabled={busy || !code.trim()}>Restore</button>
+      </form>
+      <p className="field-help">Restoring replaces everything on this device with the backup.</p>
+
+      {status ? <p className={`backup-status ${status.tone}`} role="status">{status.text}</p> : null}
+    </section>
+  )
+}
+
+function SupportCard() {
+  return (
+    <a className="support-card" href={SUPPORT_URL} target="_blank" rel="noopener noreferrer">
+      <span className="support-heart" aria-hidden="true">♥</span>
+      <span>
+        <b>Support the developer</b>
+        <small>Spell Trail is free, has no ads, and never sells your data. If it helps your family, you can chip in.</small>
+      </span>
+      <i aria-hidden="true">→</i>
+    </a>
+  )
+}
+
+// A saved pack is turned back into the text the grown-up typed, so editing is
+// the same form as creating rather than a second, different editor.
+function packToText(pack) {
+  return pack.words
+    .map((entry) => (entry.sentence.startsWith('Can you spell the word ') ? entry.word : `${entry.word}: ${entry.sentence}`))
+    .join('\n')
+}
+
+function PackForm({ onAdd, editing, onSave, onCancel }) {
+  const [name, setName] = useState(editing ? editing.name : '')
+  const [text, setText] = useState(editing ? packToText(editing) : '')
   const entries = useMemo(() => parseEntries(text), [text])
   const words = useMemo(() => buildPackWords(entries), [entries])
   const skipped = entries.length - words.length
@@ -453,6 +622,10 @@ function PackForm({ onAdd }) {
   function submit(event) {
     event.preventDefault()
     if (!words.length) return
+    if (editing) {
+      onSave(editing.id, name, words)
+      return
+    }
     onAdd(name, words)
     setName('')
     setText('')
@@ -489,7 +662,12 @@ function PackForm({ onAdd }) {
           <span>Type some words to see how they will be broken into pieces.</span>
         )}
       </div>
-      <button className="check-button" type="submit" disabled={!words.length}>Save this list</button>
+      <div className="pack-form-actions">
+        <button className="check-button" type="submit" disabled={!words.length}>
+          {editing ? 'Save changes' : 'Save this list'}
+        </button>
+        {editing ? <button className="tiny-button" type="button" onClick={onCancel}>Cancel</button> : null}
+      </div>
     </form>
   )
 }
@@ -538,9 +716,13 @@ function ProfileEditor({ profile, onRename, onPickAvatar, onDone }) {
   )
 }
 
-function Family({ store, profile, onBack, onSwitch, onAddProfile, onRemoveProfile, onRename, onPickAvatar, onAddPack, onRemovePack, onResetProfile }) {
+function Family({
+  store, profile, audio, onBack, onSwitch, onAddProfile, onRemoveProfile, onRename, onPickAvatar,
+  onAddPack, onRemovePack, onSavePack, onResetProfile, onRoundLength, onVoice, onRestoreStore,
+}) {
   const [newName, setNewName] = useState('')
   const [editingId, setEditingId] = useState(null)
+  const [editingPack, setEditingPack] = useState(null)
   const onEdit = (id) => setEditingId((current) => (current === id ? null : id))
   return (
     <main className="rewards-shell family-shell">
@@ -602,13 +784,27 @@ function Family({ store, profile, onBack, onSwitch, onAddProfile, onRemoveProfil
                   <b>{pack.name}</b>
                   <small>{pack.words.map((entry) => entry.word).join(', ')}</small>
                 </div>
+                <button className="tiny-button" type="button" onClick={() => setEditingPack(editingPack === pack.id ? null : pack.id)}>
+                  {editingPack === pack.id ? 'Close' : 'Edit'}
+                </button>
                 <ConfirmButton className="tiny-button" label="Delete" confirmLabel="Tap again to delete" onConfirm={() => onRemovePack(pack.id)} />
               </li>
             ))}
           </ul>
         ) : <p className="empty-note">No lists yet.</p>}
-        <PackForm onAdd={onAddPack} />
+        <PackForm
+          key={editingPack || 'new'}
+          editing={profile.packs.find((pack) => pack.id === editingPack) || null}
+          onAdd={onAddPack}
+          onSave={(id, name, words) => { onSavePack(id, name, words); setEditingPack(null) }}
+          onCancel={() => setEditingPack(null)}
+        />
       </section>
+
+      <SessionLength profile={profile} onRoundLength={onRoundLength} />
+      <VoicePicker store={store} audio={audio} onVoice={onVoice} />
+      <BackupPanel store={store} onRestore={onRestoreStore} />
+      <SupportCard />
 
       <section className="family-card danger-card">
         <h2>Reset {profile.name}'s progress</h2>
@@ -683,10 +879,12 @@ export default function App() {
         <Game
           source={source}
           progress={profile.progress}
+          roundLength={profile.roundLength || ROUND_LENGTH}
           onProgress={setProgress}
           onComplete={completeRound}
           onExit={() => leaveGame('home')}
           audio={audio}
+          voiceUri={store.settings?.voiceUri || null}
         />
       ) : null}
       {view === 'complete' && summary ? (
@@ -704,6 +902,7 @@ export default function App() {
         <Family
           store={store}
           profile={profile}
+          audio={audio}
           onBack={() => setView('home')}
           onSwitch={switchProfile}
           onAddProfile={(name) => setStore((current) => addProfile(current, name))}
@@ -716,11 +915,18 @@ export default function App() {
             setSelection((current) => (current.kind === 'pack' && current.id === id ? { kind: 'tier', id: DEFAULT_TIER_ID } : current))
           }}
           onResetProfile={() => setStore((current) => updateProfile(current, current.activeId, (entry) => ({ ...entry, progress: newProgress() })))}
+          onSavePack={(id, name, words) => setStore((current) => updatePack(current, current.activeId, id, { name: name.trim().slice(0, 40) || 'This week', words }))}
+          onRoundLength={(length) => setStore((current) => setRoundLength(current, current.activeId, length))}
+          onVoice={(uri) => setStore((current) => setVoice(current, uri))}
+          onRestoreStore={(changes) => setStore((current) => ({ ...current, ...changes }))}
         />
       ) : null}
       <footer>
         <span>{saveFailed ? 'Progress cannot be saved in this browser window.' : 'Spell Trail saves progress on this device.'}</span>
         <button type="button" onClick={() => setView('family')}>Players & word lists</button>
+        <a className="footer-heart" href={SUPPORT_URL} target="_blank" rel="noopener noreferrer">
+          <span aria-hidden="true">♥</span> Support the developer
+        </a>
       </footer>
     </div>
   )

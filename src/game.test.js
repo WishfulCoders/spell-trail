@@ -174,10 +174,10 @@ describe('sentence blanking', () => {
 })
 
 describe('word data integrity', () => {
-  it('covers six tiers with thirty-two words each', () => {
+  it('covers six tiers with sixty-four words each', () => {
     expect(WORD_TIERS).toHaveLength(6)
     for (const tier of WORD_TIERS) {
-      expect(tier.words.length, `${tier.id} word count`).toBe(32)
+      expect(tier.words.length, `${tier.id} word count`).toBe(64)
       expect(tier.icon, `${tier.id} icon`).toBeTruthy()
     }
   })
@@ -188,6 +188,18 @@ describe('word data integrity', () => {
       expect(new Set(word.distractors).size, `${word.word} duplicate distractors`).toBe(2)
       expect(word.distractors, `${word.word} distractor equals answer`).not.toContain(word.word)
     }
+  })
+
+  it('never repeats a word across tiers', () => {
+    const seen = new Map()
+    const dupes = []
+    for (const tier of WORD_TIERS) {
+      for (const entry of tier.words) {
+        if (seen.has(entry.word)) dupes.push(`${entry.word} (${seen.get(entry.word)} + ${tier.id})`)
+        else seen.set(entry.word, tier.id)
+      }
+    }
+    expect(dupes, `duplicated across tiers: ${dupes.join(', ')}`).toEqual([])
   })
 
   it('uses a unique word within each tier', () => {

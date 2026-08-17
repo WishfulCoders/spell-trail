@@ -1,9 +1,17 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "spell-trail",
+  "main": "worker/index.js",
   "compatibility_date": "2026-08-16",
   "assets": {
     "directory": "./dist",
-    "not_found_handling": "single-page-application"
-  }
+    "not_found_handling": "single-page-application",
+    "binding": "ASSETS"
+  },
+  "kv_namespaces": [
+    {
+      "binding": "BACKUPS",
+      "id": "4c3ea70d2ff1474b9f3858bc21dded22"
+    }
+  ]
 }

@@ -1,4 +1,4 @@
-import { STORAGE_KEY as LEGACY_KEY, newProgress, normalizeProgress } from './game.js'
+import { ROUND_LENGTH, STORAGE_KEY as LEGACY_KEY, clampRoundLength, newProgress, normalizeProgress } from './game.js'
 import { COMPANIONS, DEFAULT_COMPANION, companionById } from './shop.js'
 
 export const PROFILE_STORAGE_KEY = 'spell-trail-profiles-v1'
@@ -34,6 +34,7 @@ export function createProfile(name, index = 0) {
     progress: newProgress(),
     packs: [],
     unlocked: [],
+    roundLength: ROUND_LENGTH,
   }
 }
 
@@ -74,7 +75,26 @@ function normalizeProfile(raw, index) {
     unlocked: Array.isArray(raw.unlocked)
       ? [...new Set(raw.unlocked.filter((id) => companionById(id)))]
       : [],
+    roundLength: clampRoundLength(raw.roundLength),
   }
+}
+
+export const DEFAULT_SETTINGS = Object.freeze({ voiceUri: null })
+
+function normalizeSettings(raw) {
+  if (!raw || typeof raw !== 'object') return { ...DEFAULT_SETTINGS }
+  return { ...DEFAULT_SETTINGS, voiceUri: typeof raw.voiceUri === 'string' ? raw.voiceUri : null }
+}
+
+export function setRoundLength(store, id, length) {
+  return updateProfile(store, id, (profile) => ({ ...profile, roundLength: clampRoundLength(length) }))
+}
+
+export function updatePack(store, profileId, packId, changes) {
+  return updateProfile(store, profileId, (profile) => ({
+    ...profile,
+    packs: profile.packs.map((pack) => (pack.id === packId ? { ...pack, ...changes, id: pack.id } : pack)),
+  }))
 }
 
 export function renameProfile(store, id, name) {
@@ -85,7 +105,7 @@ export function renameProfile(store, id, name) {
 
 export function emptyStore() {
   const first = createProfile('', 0)
-  return { activeId: first.id, profiles: [first] }
+  return { activeId: first.id, profiles: [first], settings: { ...DEFAULT_SETTINGS } }
 }
 
 // A player who used the single-profile version keeps everything: their save
@@ -97,7 +117,7 @@ function migrateLegacy(storage) {
     const progress = normalizeProgress(JSON.parse(legacy))
     if (!progress.wordsPracticed && !progress.xp) return null
     const profile = { ...createProfile('', 0), progress }
-    return { activeId: profile.id, profiles: [profile] }
+    return { activeId: profile.id, profiles: [profile], settings: { ...DEFAULT_SETTINGS } }
   } catch {
     return null
   }
@@ -110,7 +130,7 @@ export function loadStore(storage = localStorage) {
       const profiles = saved.profiles.map(normalizeProfile).filter(Boolean).slice(0, MAX_PROFILES)
       if (profiles.length) {
         const activeId = profiles.some((profile) => profile.id === saved.activeId) ? saved.activeId : profiles[0].id
-        return { activeId, profiles }
+        return { activeId, profiles, settings: normalizeSettings(saved.settings) }
       }
     }
   } catch {
@@ -139,7 +159,11 @@ export function updateProfile(store, id, updater) {
 export function addProfile(store, name) {
   if (store.profiles.length >= MAX_PROFILES) return store
   const profile = createProfile(name, store.profiles.length)
-  return { activeId: profile.id, profiles: [...store.profiles, profile] }
+  return { ...store, activeId: profile.id, profiles: [...store.profiles, profile] }
+}
+
+export function setVoice(store, voiceUri) {
+  return { ...store, settings: { ...(store.settings || DEFAULT_SETTINGS), voiceUri: voiceUri || null } }
 }
 
 export function removeProfile(store, id) {
@@ -147,5 +171,5 @@ export function removeProfile(store, id) {
   if (store.profiles.length <= 1) return store
   const profiles = store.profiles.filter((profile) => profile.id !== id)
   const activeId = profiles.some((profile) => profile.id === store.activeId) ? store.activeId : profiles[0].id
-  return { activeId, profiles }
+  return { ...store, activeId, profiles }
 }

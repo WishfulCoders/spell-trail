@@ -72,6 +72,34 @@ cosmetic only: nothing in the word list is ever gated behind them. Prices climb 
 to 600 so the first companion lands in a couple of trails and the last is a long goal.
 Three are free, so a new player always starts owning their own icon.
 
+## Words per session
+
+Each player has their own trail length (3, 5, 8, 12, or 16 words), set under **Players & word
+lists**. `clampRoundLength` snaps any stored value to one of those, so the typing-checkpoint
+plan stays predictable. Missed words still come back for a second look, so a trail can run
+slightly longer than the number chosen.
+
+## Voice
+
+Speech uses the browser's built-in synthesis. Browsers pick a default voice that is usually the
+oldest and most robotic one installed, so `src/speech.js` scores the available English voices —
+rewarding Natural / Neural / Premium / Enhanced / Google voices, penalising Compact and the
+macOS novelty voices — and uses the best one. Grown-ups can override the choice, and the
+selection is per device rather than per player.
+
+## Backup
+
+There are no accounts. Backing up mints a random four-part code (`otter-sequoia-thicket-3341`)
+and stores the profile blob in Cloudflare KV under that code. Entering the code on another
+device pulls it down. No email, no password, and nothing identifying beyond the nicknames
+already typed in.
+
+The trade-off, stated in the UI: the code is the only key, so anyone holding it can read that
+backup. Restoring replaces everything on the device.
+
+`worker/index.js` serves `/api/backup` and falls through to static assets for everything else.
+The KV namespace is bound as `BACKUPS` in `wrangler.jsonc`.
+
 ## Fonts
 
 DM Sans and Manrope are self-hosted from `public/fonts` as latin-subset variable fonts
@@ -88,10 +116,21 @@ npm test
 npm run build
 ```
 
+## Supporting the project
+
+The heart in the footer and the card in the grown-ups area both point at `SUPPORT_URL`, a single
+exported constant at the top of `src/App.jsx`. Change it there and both follow.
+
 ## Deploy
 
-The production build is served by Cloudflare Workers Static Assets.
+The Worker serves the API and the static build together.
 
 ```bash
 npm run deploy
+```
+
+To run the API locally (the plain `npm run dev` Vite server has no Worker, so backup calls 404):
+
+```bash
+npx wrangler dev
 ```

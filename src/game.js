@@ -8,7 +8,21 @@ export const PRACTICE_XP = 6
 export const STREAK_BONUS_CAP = 5
 export const STREAK_FIREFLY_BONUS_AT = 3
 export const ROUND_LENGTH = 8
+export const ROUND_LENGTH_OPTIONS = [3, 5, 8, 12, 16]
 export const TYPE_SHARE = 0.25
+
+export function clampRoundLength(value) {
+  const wanted = Number(value)
+  // Number(null) is 0, so a missing value must be rejected explicitly or an
+  // older saved profile would silently drop to the shortest trail.
+  if (!Number.isFinite(wanted) || wanted <= 0) return ROUND_LENGTH
+  // Snap to the nearest offered size rather than allowing arbitrary lengths,
+  // so the mode plan stays predictable.
+  return ROUND_LENGTH_OPTIONS.reduce(
+    (best, option) => (Math.abs(option - wanted) < Math.abs(best - wanted) ? option : best),
+    ROUND_LENGTH,
+  )
+}
 
 export const DEFAULT_WORD_STAT = Object.freeze({
   right: 0,
