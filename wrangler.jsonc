@@ -3,6 +3,8 @@
   "name": "spell-trail",
   "main": "worker/index.js",
   "compatibility_date": "2026-08-16",
+  // This login can see more than one account, so pin the target explicitly.
+  "account_id": "4fb16a58f8142b7c35c5b55fcc17b033",
   "assets": {
     "directory": "./dist",
     "not_found_handling": "single-page-application",
@@ -11,7 +13,14 @@
   "kv_namespaces": [
     {
       "binding": "BACKUPS",
-      "id": "4c3ea70d2ff1474b9f3858bc21dded22"
+      "id": "7b15846d1e874de0b8a787d2d2cb5139"
     }
-  ]
+  ],
+  "workers_dev": true
+  // Custom domains for spelltrail.app are added once the placeholder DNS
+  // records at the apex are removed:
+  // "routes": [
+  //   { "pattern": "spelltrail.app", "custom_domain": true },
+  //   { "pattern": "www.spelltrail.app", "custom_domain": true }
+  // ]
 }

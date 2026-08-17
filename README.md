@@ -147,7 +147,9 @@ exported constant at the top of `src/App.jsx`. Change it there and both follow.
 
 ## Deploy
 
-The Worker serves the API and the static build together.
+The Worker serves the API and the static build together. It lives on the
+**wishfulcoders@gmail.com** Cloudflare account (`account_id` is pinned in `wrangler.jsonc`
+because that login can see more than one account), alongside the `spelltrail.app` zone.
 
 ```bash
 npm run deploy
