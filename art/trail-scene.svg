@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 420" width="560" height="420" role="img" aria-labelledby="title desc">
+  <title id="title">A winding spelling trail through green mountains</title>
+  <desc id="desc">A calm mountain landscape with a sun, trail markers, a start sign, and glowing fireflies.</desc>
+
+  <g>
+    <rect width="560" height="420" fill="#afcfcb"/>
+    <circle cx="445" cy="72" r="43" fill="#ffe58e" opacity=".24"/>
+    <circle cx="445" cy="72" r="33" fill="#f4c85a"/>
+
+    <g fill="#f8f5ec" opacity=".84">
+      <rect x="36" y="63" width="94" height="22" rx="11"/>
+      <circle cx="62" cy="64" r="19"/>
+      <circle cx="105" cy="67" r="15"/>
+      <rect x="472" y="137" width="70" height="18" rx="9"/>
+      <circle cx="491" cy="137" r="14"/>
+      <circle cx="523" cy="140" r="11"/>
+    </g>
+
+    <path d="M-35 284 128 90 285 284Z" fill="#679d82"/>
+    <path d="M126 284 304 123 474 284Z" fill="#8ab09c"/>
+    <path d="M58 174 128 90 198 174 169 160 145 164 128 146 111 164 86 159Z" fill="#e9eee2"/>
+    <path d="M-30 277 590 250 590 440-30 440Z" fill="#659274"/>
+
+    <g fill="#416e5c" opacity=".72">
+      <path d="M45 292 62 254 79 292Z"/><rect x="59" y="286" width="6" height="26"/>
+      <path d="M487 278 503 242 519 278Z"/><rect x="500" y="273" width="6" height="25"/>
+      <path d="M522 291 537 258 552 291Z"/><rect x="534" y="286" width="6" height="23"/>
+    </g>
+
+    <path d="M -30 438 C 76 405 126 437 216 392 C 294 354 346 303 592 321 L 592 287 C 346 269 294 320 216 358 C 126 403 76 371 -30 404 Z" fill="#c7b58d"/>
+    <path d="M -30 430 C 76 397 126 429 216 384 C 294 346 346 295 592 313 L 592 295 C 346 277 294 328 216 366 C 126 411 76 379 -30 412 Z" fill="#eadbb7"/>
+
+    <g>
+      <circle cx="77" cy="399" r="17" fill="#fff5da"/>
+      <circle cx="77" cy="399" r="11" fill="#e56f3d"/>
+      <circle cx="219" cy="372" r="17" fill="#fff5da"/>
+      <circle cx="219" cy="372" r="11" fill="#e56f3d"/>
+      <circle cx="386" cy="312" r="24" fill="#f1bd4a"/>
+      <path d="m386 298 4 9 10 1-8 7 2 10-8-5-9 5 2-10-7-7 10-1Z" fill="#173f37"/>
+    </g>
+
+    <g>
+      <rect x="136" y="327" width="8" height="66" rx="3" fill="#6f4b32"/>
+      <rect x="105" y="286" width="72" height="49" rx="6" fill="#71452e"/>
+      <rect x="105" y="282" width="72" height="49" rx="6" fill="#9d613c"/>
+      <rect x="122" y="297" width="38" height="5" rx="2.5" fill="#fff3d6"/>
+      <rect x="128" y="310" width="26" height="5" rx="2.5" fill="#fff3d6"/>
+    </g>
+
+    <g fill="#fff0a8">
+      <path d="m447 226 4 9 9 4-9 4-4 9-4-9-9-4 9-4Z"/>
+      <path d="m315 243 3 7 7 3-7 3-3 7-3-7-7-3 7-3Z"/>
+      <path d="m510 354 3 7 7 3-7 3-3 7-3-7-7-3 7-3Z"/>
+    </g>
+  </g>
+</svg>

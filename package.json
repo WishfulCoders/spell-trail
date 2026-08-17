@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "prebuild": "node scripts/sync-trail-art.mjs",
     "dev": "vite",
     "build": "vite build",
     "test": "vitest run",
