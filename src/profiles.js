@@ -1,11 +1,18 @@
 import { STORAGE_KEY as LEGACY_KEY, newProgress, normalizeProgress } from './game.js'
+import { COMPANIONS, DEFAULT_COMPANION, companionById } from './shop.js'
 
 export const PROFILE_STORAGE_KEY = 'spell-trail-profiles-v1'
 export const MAX_PROFILES = 6
 export const MAX_NAME_LENGTH = 16
 
 export const PROFILE_COLORS = ['#56a87f', '#428fa4', '#e28b4a', '#8d6aae', '#c9585f', '#3f7f8c']
-export const PROFILE_AVATARS = ['🦊', '🦉', '🐢', '🦋', '🐝', '🦔', '🐿️', '🦌']
+
+// Older saves stored the emoji itself; companions are keyed by id now.
+function companionIdFrom(raw) {
+  if (companionById(raw)) return raw
+  const byEmoji = COMPANIONS.find((entry) => entry.emoji === raw)
+  return byEmoji ? byEmoji.id : null
+}
 
 let counter = 0
 function nextId(prefix) {
@@ -22,12 +29,15 @@ export function createProfile(name, index = 0) {
     id: nextId('kid'),
     name: cleanName(name) || `Player ${index + 1}`,
     color: PROFILE_COLORS[index % PROFILE_COLORS.length],
-    avatar: PROFILE_AVATARS[index % PROFILE_AVATARS.length],
+    avatar: FREE_COMPANION_IDS[index % FREE_COMPANION_IDS.length] || DEFAULT_COMPANION,
     createdAt: Date.now(),
     progress: newProgress(),
     packs: [],
+    unlocked: [],
   }
 }
+
+const FREE_COMPANION_IDS = COMPANIONS.filter((entry) => entry.cost === 0).map((entry) => entry.id)
 
 export function createPack(name, words) {
   return {
@@ -57,11 +67,20 @@ function normalizeProfile(raw, index) {
     ...base,
     id: raw.id || base.id,
     color: PROFILE_COLORS.includes(raw.color) ? raw.color : base.color,
-    avatar: PROFILE_AVATARS.includes(raw.avatar) ? raw.avatar : base.avatar,
+    avatar: companionIdFrom(raw.avatar) || base.avatar,
     createdAt: Number(raw.createdAt) || base.createdAt,
     progress: normalizeProgress(raw.progress),
     packs: Array.isArray(raw.packs) ? raw.packs.map(normalizePack).filter(Boolean) : [],
+    unlocked: Array.isArray(raw.unlocked)
+      ? [...new Set(raw.unlocked.filter((id) => companionById(id)))]
+      : [],
   }
+}
+
+export function renameProfile(store, id, name) {
+  const clean = cleanName(name)
+  if (!clean) return store
+  return updateProfile(store, id, (profile) => ({ ...profile, name: clean }))
 }
 
 export function emptyStore() {

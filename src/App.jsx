@@ -24,9 +24,19 @@ import {
   createPack,
   loadStore,
   removeProfile,
+  renameProfile,
   saveStore,
   updateProfile,
 } from './profiles.js'
+import {
+  COMPANIONS,
+  buyCompanion,
+  companionEmoji,
+  equipCompanion,
+  nextCompanion,
+  ownedCompanions,
+  ownsCompanion,
+} from './shop.js'
 import { onVoicesChanged, speak, speechReady, stopSpeaking } from './speech.js'
 import { MAX_PACK_WORDS, buildPackWords, parseEntries } from './wordgen.js'
 import { DEFAULT_TIER_ID, WORD_TIERS } from './words.js'
@@ -83,7 +93,7 @@ function Header({ profile, onHome, onSwitch, view }) {
       </button>
       <div className="stats" aria-label="Player progress">
         <button className="who-chip" type="button" onClick={onSwitch} style={{ '--tier-color': profile.color }}>
-          <span aria-hidden="true">{profile.avatar}</span>
+          <span aria-hidden="true">{companionEmoji(profile.avatar)}</span>
           <span><b>{profile.name}</b><small>switch player</small></span>
         </button>
         <div className="stat-chip"><span aria-hidden="true">✨</span><span><b>{profile.progress.fireflies}</b><small>fireflies</small></span></div>
@@ -346,7 +356,9 @@ function Complete({ summary, progress, newBadges, onHome, onReplay }) {
   )
 }
 
-function Rewards({ progress, onBack }) {
+function Rewards({ profile, onBack, onBuy, onEquip }) {
+  const { progress } = profile
+  const saving = nextCompanion(profile)
   return (
     <main className="rewards-shell">
       <button className="back-button" type="button" onClick={onBack}>← Trail map</button>
@@ -367,10 +379,50 @@ function Rewards({ progress, onBack }) {
       <section className="firefly-bank">
         <div>
           <span className="soft-label light">FIREFLY JAR</span>
-          <h2>{progress.fireflies} fireflies collected</h2>
-          <p>Each correct answer adds light to your jar. A three-answer streak earns an extra firefly.</p>
+          <h2>{progress.fireflies} fireflies to spend</h2>
+          <p>
+            Each correct answer adds light to your jar, and a three-answer streak earns an extra
+            firefly. Spend them on trail companions below.
+            {saving && saving.cost > progress.fireflies
+              ? <> Your next companion, <b>{saving.name}</b>, needs {saving.cost - progress.fireflies} more.</>
+              : null}
+          </p>
         </div>
         <div className="jar" aria-label={`${progress.fireflies} fireflies`}><i>✦</i><i>✦</i><i>✦</i><i>✦</i><i>✦</i></div>
+      </section>
+
+      <section className="shop" aria-labelledby="companions">
+        <div className="section-heading">
+          <div><span className="soft-label">FIREFLY JAR</span><h2 id="companions">Trail companions</h2></div>
+          <p>Companions walk the trail with you. They are just for fun — every word stays open to everyone.</p>
+        </div>
+        <div className="companion-grid">
+          {COMPANIONS.map((item) => {
+            const owned = ownsCompanion(profile, item.id)
+            const equipped = profile.avatar === item.id
+            const affordable = progress.fireflies >= item.cost
+            const state = equipped ? 'equipped' : owned ? 'owned' : affordable ? 'affordable' : 'locked'
+            return (
+              <button
+                className={`companion-card ${state}`}
+                type="button"
+                key={item.id}
+                disabled={equipped || (!owned && !affordable)}
+                onClick={() => (owned ? onEquip(item.id) : onBuy(item.id))}
+              >
+                <span className="companion-face" aria-hidden="true">{item.emoji}</span>
+                <strong>{item.name}</strong>
+                <small>{item.note}</small>
+                <span className="companion-state">
+                  {equipped ? '✓ With you now'
+                    : owned ? 'Take this one'
+                    : affordable ? `Free the ${item.name.toLowerCase()} · ${item.cost} ✨`
+                    : `${item.cost} ✨ · ${item.cost - progress.fireflies} to go`}
+                </span>
+              </button>
+            )
+          })}
+        </div>
       </section>
     </main>
   )
@@ -442,8 +494,54 @@ function PackForm({ onAdd }) {
   )
 }
 
-function Family({ store, profile, onBack, onSwitch, onAddProfile, onRemoveProfile, onAddPack, onRemovePack, onResetProfile }) {
+function ProfileEditor({ profile, onRename, onPickAvatar, onDone }) {
+  const [name, setName] = useState(profile.name)
+  const owned = ownedCompanions(profile)
+  const locked = COMPANIONS.length - owned.length
+  return (
+    <div className="profile-editor">
+      <form
+        className="rename-row"
+        onSubmit={(event) => { event.preventDefault(); onRename(name); onDone() }}
+      >
+        <label htmlFor={`rename-${profile.id}`}>Name</label>
+        <input
+          id={`rename-${profile.id}`}
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          maxLength={MAX_NAME_LENGTH}
+          autoFocus
+        />
+        <button className="check-button" type="submit" disabled={!cleanName(name) || cleanName(name) === profile.name}>Save</button>
+      </form>
+      <fieldset className="avatar-picker">
+        <legend>Companion</legend>
+        <div className="avatar-row">
+          {owned.map((item) => (
+            <button
+              className={`avatar-choice ${profile.avatar === item.id ? 'selected' : ''}`}
+              type="button"
+              key={item.id}
+              title={item.name}
+              aria-label={item.name}
+              aria-pressed={profile.avatar === item.id}
+              onClick={() => onPickAvatar(item.id)}
+            >
+              {item.emoji}
+            </button>
+          ))}
+        </div>
+        {locked ? <p className="field-help">{locked} more to unlock with fireflies in the field guide.</p> : null}
+      </fieldset>
+      <button className="tiny-button" type="button" onClick={onDone}>Done</button>
+    </div>
+  )
+}
+
+function Family({ store, profile, onBack, onSwitch, onAddProfile, onRemoveProfile, onRename, onPickAvatar, onAddPack, onRemovePack, onResetProfile }) {
   const [newName, setNewName] = useState('')
+  const [editingId, setEditingId] = useState(null)
+  const onEdit = (id) => setEditingId((current) => (current === id ? null : id))
   return (
     <main className="rewards-shell family-shell">
       <button className="back-button" type="button" onClick={onBack}>← Trail map</button>
@@ -459,13 +557,24 @@ function Family({ store, profile, onBack, onSwitch, onAddProfile, onRemoveProfil
           {store.profiles.map((entry) => (
             <div className={`profile-card ${entry.id === profile.id ? 'selected' : ''}`} style={{ '--tier-color': entry.color }} key={entry.id}>
               <button className="profile-pick" type="button" onClick={() => onSwitch(entry.id)} aria-pressed={entry.id === profile.id}>
-                <span className="profile-avatar" aria-hidden="true">{entry.avatar}</span>
+                <span className="profile-avatar" aria-hidden="true">{companionEmoji(entry.avatar)}</span>
                 <strong>{entry.name}</strong>
                 <small>Level {levelFromXp(entry.progress.xp)} · {entry.progress.wordsPracticed} words</small>
                 <span className="tier-state">{entry.id === profile.id ? '✓ Playing now' : 'Switch to this player'}</span>
               </button>
-              {store.profiles.length > 1 ? (
-                <ConfirmButton className="tiny-button" label="Remove" confirmLabel="Tap again to remove" onConfirm={() => onRemoveProfile(entry.id)} />
+              <div className="profile-actions">
+                <button className="tiny-button" type="button" onClick={() => onEdit(entry.id)}>Edit</button>
+                {store.profiles.length > 1 ? (
+                  <ConfirmButton className="tiny-button" label="Remove" confirmLabel="Tap again to remove" onConfirm={() => onRemoveProfile(entry.id)} />
+                ) : null}
+              </div>
+              {editingId === entry.id ? (
+                <ProfileEditor
+                  profile={entry}
+                  onRename={(name) => onRename(entry.id, name)}
+                  onPickAvatar={(id) => onPickAvatar(entry.id, id)}
+                  onDone={() => onEdit(null)}
+                />
               ) : null}
             </div>
           ))}
@@ -583,7 +692,14 @@ export default function App() {
       {view === 'complete' && summary ? (
         <Complete summary={summary} progress={profile.progress} newBadges={newBadges} onHome={() => setView('home')} onReplay={() => setView('game')} />
       ) : null}
-      {view === 'rewards' ? <Rewards progress={profile.progress} onBack={() => setView('home')} /> : null}
+      {view === 'rewards' ? (
+        <Rewards
+          profile={profile}
+          onBack={() => setView('home')}
+          onBuy={(id) => setStore((current) => updateProfile(current, current.activeId, (entry) => buyCompanion(entry, id).profile))}
+          onEquip={(id) => setStore((current) => updateProfile(current, current.activeId, (entry) => equipCompanion(entry, id)))}
+        />
+      ) : null}
       {view === 'family' ? (
         <Family
           store={store}
@@ -592,6 +708,8 @@ export default function App() {
           onSwitch={switchProfile}
           onAddProfile={(name) => setStore((current) => addProfile(current, name))}
           onRemoveProfile={(id) => setStore((current) => removeProfile(current, id))}
+          onRename={(id, name) => setStore((current) => renameProfile(current, id, name))}
+          onPickAvatar={(id, companion) => setStore((current) => updateProfile(current, id, (entry) => equipCompanion(entry, companion)))}
           onAddPack={(name, words) => setStore((current) => updateProfile(current, current.activeId, (entry) => ({ ...entry, packs: [...entry.packs, createPack(name, words)] })))}
           onRemovePack={(id) => {
             setStore((current) => updateProfile(current, current.activeId, (entry) => ({ ...entry, packs: entry.packs.filter((pack) => pack.id !== id) })))

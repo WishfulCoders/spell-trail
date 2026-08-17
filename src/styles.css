@@ -1,4 +1,21 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap');
+/* Self-hosted so the app works offline and sends no request to a third party.
+   Both are variable fonts covering the full weight range in one file each. */
+@font-face {
+  font-family: 'DM Sans';
+  font-style: normal;
+  font-weight: 100 1000;
+  font-display: swap;
+  src: url('/fonts/dm-sans-latin-var.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Manrope';
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+  src: url('/fonts/manrope-latin-var.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
 
 :root { font-family: 'DM Sans', system-ui, sans-serif; color: #173f37; background: #f3f0e8; font-synthesis: none; --ink: #173f37; --cream: #f8f5ec; --orange: #e56f3d; --gold: #f1bd4a; --sage: #74ad82; }
 * { box-sizing: border-box; }
@@ -149,4 +166,47 @@ footer button.danger { color: #9a3412; font-weight: 800; text-decoration: none; 
 @media(max-width:560px){
   .answer-line strong { font-size: 23px; }
   .retry-banner { margin: -4px 0 18px; padding: 11px 13px; font-size: 12px; }
+}
+
+/* firefly shop */
+.shop { margin-top: 26px; }
+.shop .section-heading { margin-bottom: 18px; }
+.companion-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 12px; }
+.companion-card { display: flex; flex-direction: column; align-items: flex-start; min-height: 176px; padding: 18px; border: 1px solid rgba(23,63,55,.14); border-radius: 19px; background: rgba(255,255,255,.6); cursor: pointer; text-align: left; transition: .18s ease; }
+.companion-card:hover:not(:disabled) { transform: translateY(-3px); background: #fff; }
+.companion-card strong { font: 800 15px 'Manrope'; }
+.companion-card small { margin-top: 4px; color: #566661; font-size: 11px; line-height: 1.45; }
+.companion-face { width: 52px; height: 52px; display: grid; place-items: center; margin-bottom: 13px; border-radius: 15px; background: #f0f3ec; font-size: 27px; }
+.companion-state { margin-top: auto; padding-top: 13px; font-size: 11px; font-weight: 800; }
+.companion-card.equipped { border: 2px solid #3f8a5d; padding: 17px; background: #fff; }
+.companion-card.equipped .companion-face { background: #e6f4e9; }
+.companion-card.equipped .companion-state { color: #2c6b46; }
+.companion-card.owned .companion-state { color: #2c6b46; }
+.companion-card.affordable { border-color: #e0b552; background: #fffaec; }
+.companion-card.affordable .companion-face { background: #fdf0cd; }
+.companion-card.affordable .companion-state { color: #8a6019; }
+.companion-card.locked { cursor: default; }
+.companion-card.locked .companion-face { filter: grayscale(1); opacity: .4; }
+.companion-card.locked strong, .companion-card.locked small { opacity: .62; }
+.companion-card.locked .companion-state { color: #5f6d67; }
+
+/* editing a player */
+.profile-actions { display: flex; gap: 4px; justify-content: flex-end; }
+.profile-editor { margin-top: 8px; padding: 15px 13px 13px; border-top: 1px solid rgba(23,63,55,.12); }
+.rename-row { display: grid; gap: 7px; }
+.rename-row label { font-size: 11px; font-weight: 800; color: #52625b; }
+.rename-row input { min-height: 46px; width: 100%; border: 2px solid #bdcac3; border-radius: 12px; padding: 0 13px; color: var(--ink); background: #fbfcf9; font: 600 15px 'DM Sans'; }
+.rename-row .check-button { justify-self: start; margin: 2px 0 0; min-height: 44px; }
+.avatar-picker { margin: 15px 0 10px; padding: 0; border: 0; }
+.avatar-picker legend { padding: 0; margin-bottom: 8px; font-size: 11px; font-weight: 800; color: #52625b; }
+.avatar-row { display: flex; flex-wrap: wrap; gap: 7px; }
+.avatar-choice { width: 46px; height: 46px; display: grid; place-items: center; border: 2px solid transparent; border-radius: 13px; background: #f0f3ec; font-size: 22px; cursor: pointer; }
+.avatar-choice:hover { background: #e6ece1; }
+.avatar-choice.selected { border-color: var(--tier-color, #3f8a5d); background: #fff; }
+.avatar-picker .field-help { margin: 10px 0 0; }
+
+@media(max-width:560px){
+  .companion-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .companion-card { min-height: 162px; padding: 14px; }
+  .companion-card.equipped { padding: 13px; }
 }

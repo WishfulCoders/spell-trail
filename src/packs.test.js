@@ -2,16 +2,27 @@ import { describe, expect, it } from 'vitest'
 import { blankFor, blankSentence, buildRound, generateDecoys, supportedModes } from './game.js'
 import { MAX_PACK_WORDS, buildPackWords, buildWordEntry, cleanWord, parseWordList, syllabify } from './wordgen.js'
 import {
+  MAX_NAME_LENGTH,
   MAX_PROFILES,
   PROFILE_STORAGE_KEY,
   activeProfile,
   addProfile,
   createPack,
+  createProfile,
   emptyStore,
   loadStore,
   removeProfile,
+  renameProfile,
   updateProfile,
 } from './profiles.js'
+import {
+  COMPANIONS,
+  buyCompanion,
+  equipCompanion,
+  nextCompanion,
+  ownedCompanions,
+  ownsCompanion,
+} from './shop.js'
 import { STORAGE_KEY as LEGACY_KEY } from './game.js'
 
 function memoryStorage(seed = {}) {
@@ -207,5 +218,120 @@ describe('generated blank options for custom words', () => {
       expect(generateDecoys(chunk), `${chunk} leaked the answer`).not.toContain(chunk)
       expect(generateDecoys(chunk).length, `${chunk} too few decoys`).toBeGreaterThanOrEqual(2)
     }
+  })
+})
+
+describe('firefly shop', () => {
+  function withFireflies(count) {
+    const profile = createProfile('Ada', 0)
+    return { ...profile, progress: { ...profile.progress, fireflies: count } }
+  }
+
+  it('starts with the free companions and nothing else', () => {
+    const profile = withFireflies(0)
+    expect(ownedCompanions(profile).every((item) => item.cost === 0)).toBe(true)
+    expect(ownedCompanions(profile).length).toBeLessThan(COMPANIONS.length)
+  })
+
+  it('gives every player a companion they already own as their icon', () => {
+    for (let index = 0; index < 6; index += 1) {
+      const profile = createProfile('', index)
+      expect(ownsCompanion(profile, profile.avatar), `player ${index} starts locked`).toBe(true)
+    }
+  })
+
+  it('spends fireflies and equips what was bought', () => {
+    const paid = COMPANIONS.find((item) => item.cost > 0)
+    const { profile, error } = buyCompanion(withFireflies(paid.cost + 5), paid.id)
+    expect(error).toBeNull()
+    expect(profile.progress.fireflies).toBe(5)
+    expect(profile.avatar).toBe(paid.id)
+    expect(ownsCompanion(profile, paid.id)).toBe(true)
+  })
+
+  it('refuses a purchase the player cannot afford, leaving fireflies untouched', () => {
+    const paid = COMPANIONS.find((item) => item.cost > 0)
+    const before = withFireflies(paid.cost - 1)
+    const { profile, error } = buyCompanion(before, paid.id)
+    expect(error).toBe('fireflies')
+    expect(profile.progress.fireflies).toBe(paid.cost - 1)
+    expect(ownsCompanion(profile, paid.id)).toBe(false)
+  })
+
+  it('never charges twice for the same companion', () => {
+    const paid = COMPANIONS.find((item) => item.cost > 0)
+    const first = buyCompanion(withFireflies(paid.cost * 3), paid.id).profile
+    const second = buyCompanion(first, paid.id)
+    expect(second.error).toBe('owned')
+    expect(second.profile.progress.fireflies).toBe(first.progress.fireflies)
+  })
+
+  it('costs nothing to equip something already owned', () => {
+    const profile = withFireflies(40)
+    const free = ownedCompanions(profile).find((item) => item.id !== profile.avatar)
+    const next = equipCompanion(profile, free.id)
+    expect(next.avatar).toBe(free.id)
+    expect(next.progress.fireflies).toBe(40)
+  })
+
+  it('will not equip a companion the player has not unlocked', () => {
+    const profile = withFireflies(0)
+    const paid = COMPANIONS.find((item) => item.cost > 0)
+    expect(equipCompanion(profile, paid.id).avatar).toBe(profile.avatar)
+  })
+
+  it('prices companions in increasing order so the first is reachable', () => {
+    const costs = COMPANIONS.map((item) => item.cost)
+    expect([...costs].sort((a, b) => a - b)).toEqual(costs)
+    expect(COMPANIONS.find((item) => item.cost > 0).cost).toBeLessThanOrEqual(25)
+  })
+
+  it('points at the cheapest companion still locked', () => {
+    const profile = withFireflies(0)
+    expect(nextCompanion(profile).cost).toBeGreaterThan(0)
+    const bought = buyCompanion(withFireflies(1000), nextCompanion(profile).id).profile
+    expect(nextCompanion(bought).cost).toBeGreaterThan(nextCompanion(profile).cost)
+  })
+})
+
+describe('editing a player', () => {
+  it('renames without touching progress or companions', () => {
+    const store = addProfile(emptyStore(), 'Ada')
+    const id = store.activeId
+    const next = renameProfile(store, id, '  Ada  B  ')
+    const profile = next.profiles.find((entry) => entry.id === id)
+    expect(profile.name).toBe('Ada B')
+    expect(profile.progress).toEqual(store.profiles.find((entry) => entry.id === id).progress)
+  })
+
+  it('ignores a blank rename rather than leaving a nameless player', () => {
+    const store = addProfile(emptyStore(), 'Ada')
+    expect(renameProfile(store, store.activeId, '   ')).toBe(store)
+  })
+
+  it('trims an over-long name to the limit', () => {
+    const store = emptyStore()
+    const next = renameProfile(store, store.activeId, 'x'.repeat(60))
+    expect(activeProfile(next).name.length).toBe(MAX_NAME_LENGTH)
+  })
+
+  it('restores an emoji icon saved by an older version', () => {
+    const owl = COMPANIONS.find((item) => item.id === 'owl')
+    const saved = JSON.stringify({ activeId: 'x', profiles: [{ id: 'x', name: 'Ada', avatar: owl.emoji }] })
+    expect(activeProfile(loadStore(memoryStorage({ [PROFILE_STORAGE_KEY]: saved }))).avatar).toBe('owl')
+  })
+
+  it('drops unknown companion ids from a saved unlock list', () => {
+    const saved = JSON.stringify({ activeId: 'x', profiles: [{ id: 'x', name: 'Ada', unlocked: ['bee', 'not-a-thing'] }] })
+    expect(activeProfile(loadStore(memoryStorage({ [PROFILE_STORAGE_KEY]: saved }))).unlocked).toEqual(['bee'])
+  })
+
+  it('keeps purchases when the store round-trips through storage', () => {
+    const bought = buyCompanion({ ...createProfile('Ada', 0), progress: { ...createProfile('Ada', 0).progress, fireflies: 100 } }, 'butterfly').profile
+    const saved = JSON.stringify({ activeId: bought.id, profiles: [bought] })
+    const loaded = activeProfile(loadStore(memoryStorage({ [PROFILE_STORAGE_KEY]: saved })))
+    expect(loaded.unlocked).toContain('butterfly')
+    expect(loaded.avatar).toBe('butterfly')
+    expect(loaded.progress.fireflies).toBe(80)
   })
 })

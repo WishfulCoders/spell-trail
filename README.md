@@ -54,14 +54,29 @@ different set each time.
 
 ## Players and custom word lists
 
-Up to six players share a device, each with separate progress, badges, and word lists.
-A save from the earlier single-player version is migrated into the first profile rather
-than discarded.
+Up to six players share a device, each with separate progress, badges, companions, and
+word lists. A save from the earlier single-player version is migrated into the first
+profile rather than discarded. Names and companions are editable under **Players & word
+lists**.
 
 Grown-ups can type in a weekly spelling list under **Players & word lists**. Entries are
 one per line or comma-separated, and `word: sentence` supplies your own sentence.
 `src/wordgen.js` syllabifies each word and generates misspellings so a bare list still
 plays every game mode.
+
+## Fireflies
+
+Fireflies are the soft currency — one per correct answer, two on a streak of three or
+more. They buy trail companions (`src/shop.js`), which set the player's icon and are
+cosmetic only: nothing in the word list is ever gated behind them. Prices climb from 20
+to 600 so the first companion lands in a couple of trails and the last is a long goal.
+Three are free, so a new player always starts owning their own icon.
+
+## Fonts
+
+DM Sans and Manrope are self-hosted from `public/fonts` as latin-subset variable fonts
+(about 60 kB total, one file per family) and preloaded in `index.html`. The app makes no
+third-party requests at runtime.
 
 ## Checks
 
