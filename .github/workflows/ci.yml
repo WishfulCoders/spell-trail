@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # The word-data invariants live in these tests: chunks must rejoin into
+      # the word, sentences must contain it, blanks must offer three distinct
+      # options, and no word may appear in two tiers.
+      - run: npm test
+
+      - run: npm run build

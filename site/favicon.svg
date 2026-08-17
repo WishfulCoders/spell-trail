@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Spell Trail">
+  <rect width="64" height="64" rx="14" fill="#f3f0e8"/>
+  <g transform="rotate(-3 32 32)">
+    <!-- the gold drop shadow the app's brand mark carries -->
+    <path d="M13 15 h38 a5 5 0 0 1 5 5 v25 a7 7 0 0 1 -7 7 h-34 a7 7 0 0 1 -7 -7 v-25 a5 5 0 0 1 5 -5 z"
+          transform="translate(3 4)" fill="#d7a847"/>
+    <path d="M13 15 h38 a5 5 0 0 1 5 5 v25 a7 7 0 0 1 -7 7 h-34 a7 7 0 0 1 -7 -7 v-25 a5 5 0 0 1 5 -5 z"
+          fill="#173f37"/>
+    <text x="32" y="43" text-anchor="middle"
+          font-family="Manrope, DM Sans, Helvetica, Arial, sans-serif" font-size="27" font-weight="800"
+          fill="#fff5dd">S</text>
+  </g>
+</svg>

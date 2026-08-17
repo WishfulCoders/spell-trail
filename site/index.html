@@ -1,0 +1,558 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Spell Trail — a calm spelling game for short practice sessions</title>
+<meta name="description" content="A calm, local-first spelling game built around five-minute trails. Six tiers of hand-authored words, five question modes, and a review camp that quietly brings back the ones that were missed. No accounts, no ads." />
+<link rel="canonical" href="https://about.spelltrail.app/" />
+<meta name="theme-color" content="#173f37" />
+
+<meta property="og:type" content="website" />
+<meta property="og:url" content="https://about.spelltrail.app/" />
+<meta property="og:title" content="Spell Trail — a calm spelling game for short practice sessions" />
+<meta property="og:description" content="Five-minute trails, 384 hand-authored words, and a review camp that brings back the ones that were missed. No accounts, no ads, open source." />
+<meta property="og:image" content="https://about.spelltrail.app/social.png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:image:alt" content="Spell Trail — spelling that feels like a walk, not a worksheet." />
+<meta name="twitter:card" content="summary_large_image" />
+
+<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+<link rel="apple-touch-icon" href="/favicon.svg" />
+
+<!-- Self-hosted, same two variable fonts the app uses. No font network, no third party. -->
+<link rel="preload" href="/fonts/manrope-latin-var.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="/fonts/dm-sans-latin-var.woff2" as="font" type="font/woff2" crossorigin />
+
+<style>
+@font-face { font-family: 'DM Sans'; font-style: normal; font-weight: 100 1000; font-display: swap; src: url('/fonts/dm-sans-latin-var.woff2') format('woff2'); }
+@font-face { font-family: 'Manrope'; font-style: normal; font-weight: 200 800; font-display: swap; src: url('/fonts/manrope-latin-var.woff2') format('woff2'); }
+
+:root {
+  --ink: #173f37;
+  --ink-deep: #0b2d27;
+  --ink-soft: #4a5f57;
+  --paper: #f3f0e8;
+  --cream: #f8f5ec;
+  --orange: #e56f3d;
+  --gold: #f1bd4a;
+  --sage: #74ad82;
+  --line: rgba(23, 63, 55, .12);
+  --maxw: 1120px;
+  --pad: clamp(20px, 5vw, 56px);
+  color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  font-family: 'DM Sans', system-ui, -apple-system, sans-serif;
+  font-synthesis: none;
+  -webkit-font-smoothing: antialiased;
+  color: var(--ink);
+  background: radial-gradient(circle at 9% 4%, #fffaf0 0 11%, transparent 34%), var(--paper);
+  font-size: clamp(15px, 14.4px + .2vw, 17px);
+  line-height: 1.62;
+}
+h1, h2, h3 { font-family: 'Manrope', sans-serif; font-weight: 800; line-height: 1.06; letter-spacing: -.02em; text-wrap: balance; margin: 0; }
+p { text-wrap: pretty; }
+a { color: inherit; }
+img, svg { max-width: 100%; }
+
+.wrap { max-width: var(--maxw); margin-inline: auto; padding-inline: var(--pad); }
+.section { padding-block: clamp(56px, 8vw, 104px); }
+
+.eyebrow {
+  display: block; margin: 0 0 14px;
+  font-family: 'Manrope', sans-serif; font-weight: 800; font-size: 10px;
+  letter-spacing: 2px; text-transform: uppercase; color: #4c6055;
+}
+.eyebrow.light { color: #b7ccc0; }
+
+.skip-link { position: fixed; left: 16px; top: 10px; z-index: 100; padding: 10px 14px; border-radius: 10px; color: #fff; background: var(--ink); transform: translateY(-180%); text-decoration: none; }
+.skip-link:focus { transform: translateY(0); }
+a:focus-visible, button:focus-visible { outline: 4px solid rgba(31, 112, 151, .32); outline-offset: 3px; border-radius: 6px; }
+
+/* ---------- nav ---------- */
+.nav { display: flex; align-items: center; gap: 24px; height: 84px; max-width: var(--maxw); margin-inline: auto; padding-inline: var(--pad); }
+.brand { display: flex; align-items: center; gap: 12px; text-decoration: none; }
+.brand-mark {
+  width: 42px; height: 42px; flex: none; display: grid; place-items: center;
+  border-radius: 13px 13px 18px 18px; transform: rotate(-3deg);
+  color: #fff5dd; background: var(--ink); box-shadow: 3px 4px 0 #d7a847;
+  font: 800 23px 'Manrope';
+}
+.brand strong { display: block; font: 800 18px 'Manrope'; letter-spacing: -.4px; }
+.brand small { display: block; margin-top: 1px; color: #52635d; font-size: 11px; }
+.nav-links { display: flex; align-items: center; gap: 26px; margin-left: auto; font-size: 14px; font-weight: 600; }
+.nav-links a { text-decoration: none; color: var(--ink-soft); }
+.nav-links a:hover { color: var(--ink); }
+@media (max-width: 760px) { .nav-links .hide-sm { display: none; } }
+
+/* ---------- buttons ---------- */
+.btn {
+  display: inline-flex; align-items: center; gap: 12px;
+  min-height: 56px; padding: 0 24px; border-radius: 16px;
+  font-family: 'Manrope', sans-serif; font-weight: 800; font-size: 15px;
+  text-decoration: none; cursor: pointer; border: 0;
+  transition: transform .15s ease, box-shadow .15s ease, background-color .15s ease;
+}
+.btn-primary { color: #fff; background: var(--ink); box-shadow: 0 6px 0 var(--ink-deep); }
+.btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 0 var(--ink-deep); }
+.btn-primary:active { transform: translateY(3px); box-shadow: 0 3px 0 var(--ink-deep); }
+.btn-primary i { width: 34px; height: 34px; flex: none; display: grid; place-items: center; border-radius: 10px; color: var(--ink); background: var(--gold); font-style: normal; font-size: 18px; }
+.btn-ghost { border: 1px solid rgba(23,63,55,.24); color: var(--ink); background: transparent; }
+.btn-ghost:hover { background: rgba(255,255,255,.7); transform: translateY(-2px); }
+.on-dark .btn-ghost { border-color: rgba(248,245,236,.4); color: var(--cream); }
+.on-dark .btn-ghost:hover { background: rgba(255,255,255,.1); }
+.cta-row { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; }
+
+/* ---------- hero ---------- */
+.hero .wrap { padding-block: clamp(16px, 3vw, 34px) clamp(56px, 7vw, 90px); }
+.hero-card {
+  position: relative; overflow: hidden;
+  display: grid; grid-template-columns: 54% 46%;
+  border-radius: 30px; background: #dce7d8;
+  box-shadow: 0 18px 50px rgba(43,66,50,.09);
+}
+.hero-copy { z-index: 2; padding: clamp(34px, 4.4vw, 60px); }
+.hero-copy h1 { font-size: clamp(36px, 4.6vw, 58px); letter-spacing: -.045em; }
+.hero-copy h1 em { font-style: normal; color: var(--orange); }
+.hero-copy .lede { max-width: 46ch; margin: 20px 0 28px; color: #3f544c; }
+.hero-note { margin: 22px 0 0; font-size: 13px; color: #4c6055; }
+
+/* CSS trail art — the same scene the app opens on */
+.hero-art { position: relative; min-height: 420px; overflow: hidden; background: linear-gradient(#afcfcb 0 58%, #7fb087 58%); }
+.sun { position: absolute; width: 83px; height: 83px; border-radius: 50%; background: #f4c85a; right: 19%; top: 48px; box-shadow: 0 0 0 12px rgba(255,229,142,.22); }
+.cloud { position: absolute; width: 85px; height: 23px; border-radius: 30px; background: rgba(248,245,236,.8); }
+.cloud:before, .cloud:after { content: ''; position: absolute; border-radius: 50%; background: inherit; }
+.cloud:before { width: 38px; height: 38px; left: 14px; bottom: 0; }
+.cloud:after { width: 29px; height: 29px; right: 10px; bottom: 0; }
+.cloud-one { top: 54px; left: 30px; }
+.cloud-two { top: 104px; right: -15px; transform: scale(.7); }
+.mountain { position: absolute; width: 0; height: 0; border-left: 180px solid transparent; border-right: 180px solid transparent; border-bottom: 230px solid #679d82; bottom: 92px; left: -25px; }
+.mountain-back { transform: scale(.8); left: 160px; bottom: 110px; border-bottom-color: #8ab09c; }
+.mountain-front:after { content: ''; position: absolute; width: 0; height: 0; border-left: 42px solid transparent; border-right: 42px solid transparent; border-bottom: 57px solid #e9eee2; transform: rotate(180deg); left: -42px; top: 230px; }
+.path { position: absolute; left: 0; right: 0; bottom: 0; height: 42%; min-height: 140px; background: #659274; clip-path: polygon(0 26%, 100% 0, 100% 100%, 0 100%); }
+.trail-line { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.trail-line path { fill: none; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.trail-shadow { stroke: #c7b58d; stroke-width: 42; }
+.trail-fill { stroke: #eadbb7; stroke-width: 30; }
+.path-dot { position: absolute; z-index: 2; width: 28px; height: 28px; border-radius: 50%; border: 5px solid #fff5da; background: var(--orange); box-shadow: 0 3px 0 rgba(23,63,55,.16); transform: translate(-50%,-50%); }
+.path-dot.one { left: 17%; top: 67%; }
+.path-dot.two { left: 46%; top: 61%; }
+.path-dot.three { left: 78%; top: 27%; width: 40px; height: 40px; display: grid; place-items: center; border: 0; background: var(--gold); color: var(--ink); }
+.sign { position: absolute; z-index: 4; left: 51px; bottom: 31%; width: 82px; padding: 7px 10px; background: #9d613c; color: #fff3d6; border-radius: 5px; transform: rotate(-3deg); font: 800 10px 'Manrope'; letter-spacing: 1px; box-shadow: 0 5px 0 #71452e; }
+.sign:after { content: ''; position: absolute; width: 8px; height: 55px; background: #6f4b32; left: 35px; top: 46px; }
+.sign span { display: block; }
+.firefly { position: absolute; z-index: 3; color: #fff0a8; text-shadow: 0 0 10px #ffda56; font-size: 23px; animation: drift 6s ease-in-out infinite; }
+.f1 { right: 42px; top: 176px; }
+.f2 { right: 130px; bottom: 63px; animation-delay: -2s; }
+.f3 { left: 190px; top: 160px; animation-delay: -4s; }
+@keyframes drift { 50% { transform: translate(6px, -10px); } }
+
+@media (max-width: 900px) { .hero-card { grid-template-columns: 1fr; } .hero-art { min-height: 290px; } }
+@media (max-width: 560px) { .hero-art { display: none; } .hero-card { border-radius: 22px; } }
+
+/* ---------- steps ---------- */
+.section-head { max-width: 46ch; margin-bottom: clamp(30px, 4vw, 46px); }
+.section-head h2 { font-size: clamp(26px, 2.6vw, 38px); }
+.section-head p { margin: 14px 0 0; color: var(--ink-soft); }
+
+.steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; counter-reset: step; }
+.step { position: relative; padding: 28px; border: 1px solid var(--line); border-radius: 22px; background: rgba(255,255,255,.6); }
+.step:before {
+  counter-increment: step; content: counter(step);
+  display: grid; place-items: center; width: 40px; height: 40px; margin-bottom: 18px;
+  border-radius: 12px; background: var(--ink); color: var(--gold);
+  font: 800 17px 'Manrope';
+}
+.step h3 { font-size: 18px; }
+.step p { margin: 8px 0 0; font-size: 14px; color: var(--ink-soft); }
+@media (max-width: 820px) { .steps { grid-template-columns: 1fr; } }
+
+/* ---------- modes ---------- */
+.modes { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
+.mode {
+  display: flex; flex-direction: column; min-height: 210px; padding: 24px;
+  border: 1px solid var(--line); border-radius: 21px; background: rgba(255,255,255,.6);
+  transition: transform .18s ease, background-color .18s ease, box-shadow .18s ease;
+}
+.mode:hover { transform: translateY(-3px); background: #fff; box-shadow: 0 12px 32px rgba(43,66,50,.07); }
+.mode-icon { width: 48px; height: 48px; display: grid; place-items: center; margin-bottom: 18px; border-radius: 14px; background: #edf3e9; font-size: 23px; }
+.mode h3 { font-size: 16px; }
+.mode b { display: block; margin-top: 3px; font-size: 11px; font-weight: 800; color: var(--orange); }
+.mode p { margin: 12px 0 0; font-size: 13px; line-height: 1.5; color: #566661; }
+
+/* ---------- feature band (dark) ---------- */
+.band { color: var(--cream); background: var(--ink); }
+.band-grid { display: grid; grid-template-columns: 1.15fr 1fr; gap: clamp(30px, 5vw, 64px); align-items: center; }
+.band h2 { font-size: clamp(26px, 2.6vw, 38px); }
+.band p { color: #cadbd3; }
+.band .lede { margin: 18px 0 0; }
+.camp-card { padding: 28px; border-radius: 23px; background: rgba(255,255,255,.07); border: 1px solid rgba(248,245,236,.14); }
+.camp-row { display: flex; align-items: center; gap: 14px; padding: 13px 0; border-bottom: 1px solid rgba(248,245,236,.12); }
+.camp-row:last-child { border-bottom: 0; padding-bottom: 0; }
+.camp-row span:first-child { width: 38px; height: 38px; flex: none; display: grid; place-items: center; border-radius: 50%; background: rgba(241,189,74,.16); font-size: 19px; }
+.camp-row b { display: block; font: 800 14px 'Manrope'; }
+.camp-row small { display: block; color: #a9c1b7; font-size: 12px; line-height: 1.45; }
+@media (max-width: 860px) { .band-grid { grid-template-columns: 1fr; } }
+
+/* ---------- privacy ---------- */
+.privacy-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; margin-top: 30px; }
+.pill { display: flex; gap: 14px; align-items: flex-start; padding: 20px; border: 1px solid var(--line); border-radius: 18px; background: rgba(255,255,255,.6); }
+.pill > span { font-size: 22px; line-height: 1.2; }
+.pill b { display: block; font: 800 14px 'Manrope'; }
+.pill small { display: block; margin-top: 4px; font-size: 12.5px; line-height: 1.5; color: #566661; }
+
+/* ---------- grown-ups ---------- */
+.grownup { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; }
+.grownup div { padding: 26px; border-radius: 21px; background: #fff; border: 1px solid var(--line); }
+.grownup h3 { font-size: 17px; }
+.grownup p { margin: 9px 0 0; font-size: 14px; color: var(--ink-soft); }
+code { padding: 2px 6px; border-radius: 5px; background: rgba(23,63,55,.08); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .88em; }
+
+/* ---------- open source ---------- */
+.oss { display: grid; grid-template-columns: 1fr auto; gap: 40px; align-items: center; padding: clamp(30px, 4vw, 48px); border-radius: 28px; background: #dce7d8; }
+.oss h2 { font-size: clamp(24px, 2.4vw, 34px); }
+.oss p { max-width: 54ch; margin: 14px 0 0; color: #3f544c; }
+.oss .cta-row { margin-top: 26px; }
+.oss-badges { display: grid; gap: 10px; font-family: 'Manrope', sans-serif; font-size: 12px; font-weight: 800; }
+.oss-badges span { padding: 11px 16px; border-radius: 12px; background: rgba(255,255,255,.6); white-space: nowrap; }
+@media (max-width: 860px) { .oss { grid-template-columns: 1fr; gap: 26px; } }
+
+/* ---------- footer ---------- */
+footer { border-top: 1px solid var(--line); }
+.foot { display: flex; flex-wrap: wrap; gap: 18px 28px; align-items: center; padding-block: 34px; font-size: 13px; color: var(--ink-soft); }
+.foot a { text-decoration: none; }
+.foot a:hover { text-decoration: underline; }
+.foot .spacer { margin-left: auto; }
+.studio-line { font-weight: 500; }
+.studio-line b { font-weight: 800; }
+
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
+</style>
+</head>
+<body>
+
+<a class="skip-link" href="#main">Skip to content</a>
+
+<header>
+  <nav class="nav">
+    <a class="brand" href="/">
+      <span class="brand-mark" aria-hidden="true">S</span>
+      <span>
+        <strong>Spell Trail</strong>
+        <small>A Wishful Coders app</small>
+      </span>
+    </a>
+    <div class="nav-links">
+      <a class="hide-sm" href="#how">How it works</a>
+      <a class="hide-sm" href="#modes">Question modes</a>
+      <a class="hide-sm" href="#privacy">Privacy</a>
+      <a href="https://github.com/wishfulcoders/spell-trail">Source</a>
+    </div>
+  </nav>
+</header>
+
+<main id="main">
+
+  <!-- ---------- hero ---------- -->
+  <section class="hero">
+    <div class="wrap">
+      <div class="hero-card">
+        <div class="hero-copy">
+          <span class="eyebrow">Spelling practice, five minutes at a time</span>
+          <h1>Spelling that feels like a <em>walk</em>, not a worksheet.</h1>
+          <p class="lede">
+            A trail is about eight words and about five minutes. Each word is asked in the
+            way that suits it, and the ones that get missed quietly come back until they
+            stick. No accounts, no ads, nothing to sign up for.
+          </p>
+          <div class="cta-row">
+            <a class="btn btn-primary" href="https://spelltrail.app">
+              Play free at spelltrail.app <i aria-hidden="true">→</i>
+            </a>
+            <a class="btn btn-ghost" href="https://github.com/wishfulcoders/spell-trail">View the source</a>
+          </div>
+          <p class="hero-note">Works in any modern browser · Free and open source · Nothing to install</p>
+        </div>
+
+        <div class="hero-art" aria-hidden="true">
+          <div class="cloud cloud-one"></div>
+          <div class="cloud cloud-two"></div>
+          <div class="sun"></div>
+          <div class="mountain mountain-back"></div>
+          <div class="mountain mountain-front"></div>
+          <div class="path">
+            <svg class="trail-line" viewBox="0 0 400 200" preserveAspectRatio="none">
+              <path class="trail-shadow" d="M-10 178 C 90 150, 150 130, 210 108 S 330 60, 420 22" />
+              <path class="trail-fill" d="M-10 178 C 90 150, 150 130, 210 108 S 330 60, 420 22" />
+            </svg>
+          </div>
+          <div class="sign"><span>TRAIL</span><span>START</span></div>
+          <div class="path-dot one"></div>
+          <div class="path-dot two"></div>
+          <div class="path-dot three">★</div>
+          <div class="firefly f1">✦</div>
+          <div class="firefly f2">✦</div>
+          <div class="firefly f3">✦</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ---------- how it works ---------- -->
+  <section class="section" id="how">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="eyebrow">How a trail works</span>
+        <h2>Short enough to finish, spaced enough to stick.</h2>
+        <p>
+          The whole design assumes a child who has ten minutes before dinner and no
+          patience for a loading screen.
+        </p>
+      </div>
+      <div class="steps">
+        <div class="step">
+          <h3>Pick a trail</h3>
+          <p>
+            Six tiers of sixty-four words, or this week's list from school. Each trail
+            draws from the pool, so replaying a tier gives a mostly different set.
+          </p>
+        </div>
+        <div class="step">
+          <h3>Walk it</h3>
+          <p>
+            Eight or so questions, each in the mode that suits the word. Recall
+            checkpoints — where the whole word has to be produced from scratch — are
+            spaced evenly rather than saved for the end.
+          </p>
+        </div>
+        <div class="step">
+          <h3>Miss one? It comes back.</h3>
+          <p>
+            Once before the trail ends, one step easier. Then it waits at review camp until
+            it's been answered cleanly twice.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ---------- modes ---------- -->
+  <section class="section" id="modes" style="padding-top:0">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="eyebrow">Five ways to ask</span>
+        <h2>The same word, asked five different ways.</h2>
+        <p>
+          Recognising a word and producing it are different skills. A trail exercises both,
+          and steps down to an easier mode rather than showing a question that can't be
+          answered.
+        </p>
+      </div>
+      <div class="modes">
+        <div class="mode">
+          <span class="mode-icon" aria-hidden="true">🔊</span>
+          <h3>Listen &amp; spot</h3>
+          <b>RECOGNITION</b>
+          <p>Hear the word, then pick it from three spellings — two of which are plausible mistakes a child would actually make, not obvious non-words.</p>
+        </div>
+        <div class="mode">
+          <span class="mode-icon" aria-hidden="true">🧩</span>
+          <h3>Fill the gap</h3>
+          <b>STRUCTURE</b>
+          <p>The word appears as its syllable chunks with one replaced by a <b>?</b>. Choose the piece that belongs there.</p>
+        </div>
+        <div class="mode">
+          <span class="mode-icon" aria-hidden="true">🪵</span>
+          <h3>Build the word</h3>
+          <b>STRUCTURE</b>
+          <p>Tap every chunk in order. A long word stops being one intimidating shape and becomes three small ones.</p>
+        </div>
+        <div class="mode">
+          <span class="mode-icon" aria-hidden="true">🧠</span>
+          <h3>Memory trail</h3>
+          <b>RECALL CHECKPOINT</b>
+          <p>The word is shown for a few seconds — longer words get longer, up to five — then hidden, and asked for from memory.</p>
+        </div>
+        <div class="mode">
+          <span class="mode-icon" aria-hidden="true">⌨️</span>
+          <h3>Typing checkpoint</h3>
+          <b>RECALL CHECKPOINT</b>
+          <p>No options, no letters on screen. Just the word spoken aloud and an empty box.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ---------- review camp ---------- -->
+  <section class="section band on-dark">
+    <div class="wrap band-grid">
+      <div>
+        <span class="eyebrow light">Review camp</span>
+        <h2>A word can be right ten times and still have been missed this morning.</h2>
+        <p class="lede">
+          That's why review camp doesn't track a total score. A word joins the moment it's
+          missed and only leaves after <b>two clean answers since the mistake</b> — so
+          getting it right in the same trail counts towards getting out, which is the whole
+          point.
+        </p>
+        <p class="lede">
+          The queue is ordered neediest-first: fewest clean answers since the miss, then the
+          freshest mistake. A review trail takes from the front of that list rather than
+          sampling it.
+        </p>
+      </div>
+      <div class="camp-card">
+        <div class="camp-row">
+          <span aria-hidden="true">🔁</span>
+          <span>
+            <b>Missed → back in the same trail</b>
+            <small>One step easier than the mode that caught it.</small>
+          </span>
+        </div>
+        <div class="camp-row">
+          <span aria-hidden="true">⛺</span>
+          <span>
+            <b>Then it waits at camp</b>
+            <small>Shown on the trail map only when there's something in it.</small>
+          </span>
+        </div>
+        <div class="camp-row">
+          <span aria-hidden="true">✅</span>
+          <span>
+            <b>Two clean answers to leave</b>
+            <small>Second looks count for review, but never for the streak or accuracy.</small>
+          </span>
+        </div>
+        <div class="camp-row">
+          <span aria-hidden="true">🤷</span>
+          <span>
+            <b>"I don't know" on every question</b>
+            <small>An honest out beats a wild guess, and it's scored as a miss either way.</small>
+          </span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ---------- privacy ---------- -->
+  <section class="section" id="privacy">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="eyebrow">Privacy</span>
+        <h2>A children's app that collects nothing.</h2>
+        <p>
+          Not "collects nothing important" — there is no account to collect it against.
+          Progress lives in the browser on the device, and that's the whole system.
+        </p>
+      </div>
+      <div class="privacy-grid">
+        <div class="pill">
+          <span aria-hidden="true">🚫</span>
+          <span><b>No accounts, no sign-up</b><small>No email, no password, no profile on a server. Nothing to delete because nothing was made.</small></span>
+        </div>
+        <div class="pill">
+          <span aria-hidden="true">📵</span>
+          <span><b>No ads, no trackers</b><small>No third-party scripts. Even the fonts are self-hosted so they can't phone home.</small></span>
+        </div>
+        <div class="pill">
+          <span aria-hidden="true">💾</span>
+          <span><b>Backup is opt-in</b><small>A grown-up asks for it and gets a code like <code>otter-sequoia-thicket-3341</code>. That code is the only key — and the app says so plainly.</small></span>
+        </div>
+        <div class="pill">
+          <span aria-hidden="true">🗑️</span>
+          <span><b>Deletable, and it expires</b><small>Backups can be removed from the same panel, and untouched ones expire after two years.</small></span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ---------- for grown-ups ---------- -->
+  <section class="section" style="padding-top:0">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="eyebrow">For grown-ups</span>
+        <h2>Set it up once, then stay out of the way.</h2>
+      </div>
+      <div class="grownup">
+        <div>
+          <h3>This week's spelling list</h3>
+          <p>
+            Paste it in, one per line or comma-separated. Use <code>word: sentence</code> to
+            supply your own sentence. The app syllabifies each word and generates its
+            decoys, so a bare list still plays every mode.
+          </p>
+        </div>
+        <div>
+          <h3>Up to six players</h3>
+          <p>
+            One device, six children, separate progress, badges, word lists, and companions.
+            Each has their own trail length — 3, 5, 8, 12, or 16 words.
+          </p>
+        </div>
+        <div>
+          <h3>Pick a better voice</h3>
+          <p>
+            Browsers default to the oldest, most robotic voice installed. Spell Trail scores
+            the available ones and picks the best — and you can override it.
+          </p>
+        </div>
+        <div>
+          <h3>Nothing is locked</h3>
+          <p>
+            Fireflies buy cosmetic trail companions and nothing else. No word, tier, or
+            feature is ever gated behind a currency or a purchase.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ---------- open source ---------- -->
+  <section class="section" style="padding-top:0">
+    <div class="wrap">
+      <div class="oss">
+        <div>
+          <span class="eyebrow">Open source, on purpose</span>
+          <h2>The code is on GitHub. All of it.</h2>
+          <p>
+            Anyone can point an AI at a product and say "make me one of these," so pretending
+            the code is a secret seems like the wrong bet. We'd rather build in the open, be
+            checkable about the privacy claims on this page, and compete on the experience.
+          </p>
+          <div class="cta-row">
+            <a class="btn btn-primary" href="https://github.com/wishfulcoders/spell-trail">
+              wishfulcoders/spell-trail <i aria-hidden="true">→</i>
+            </a>
+            <a class="btn btn-ghost" href="https://github.com/wishfulcoders/spell-trail/blob/main/CONTRIBUTING.md">Contribute</a>
+          </div>
+        </div>
+        <div class="oss-badges">
+          <span>⚖️&nbsp;&nbsp;AGPL-3.0</span>
+          <span>💼&nbsp;&nbsp;Commercial license available</span>
+          <span>📚&nbsp;&nbsp;384 hand-authored words</span>
+          <span>🍃&nbsp;&nbsp;React + one Cloudflare Worker</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap foot">
+    <a href="https://spelltrail.app">Play Spell Trail</a>
+    <a href="https://github.com/wishfulcoders/spell-trail">Source</a>
+    <a href="mailto:support@spelltrail.app">support@spelltrail.app</a>
+    <span class="spacer"></span>
+    <a class="studio-line" href="https://wishfulcoders.com">A <b>Wishful Coders</b> app</a>
+  </div>
+</footer>
+
+</body>
+</html>

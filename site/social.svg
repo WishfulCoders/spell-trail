@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630" role="img" aria-label="Spell Trail — spelling that feels like a walk, not a worksheet">
+  <defs>
+    <clipPath id="card"><rect x="0" y="0" width="1200" height="630"/></clipPath>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#afcfcb"/>
+      <stop offset="58%" stop-color="#afcfcb"/>
+      <stop offset="58%" stop-color="#7fb087"/>
+      <stop offset="100%" stop-color="#7fb087"/>
+    </linearGradient>
+  </defs>
+
+  <g clip-path="url(#card)">
+    <rect width="1200" height="630" fill="#dce7d8"/>
+
+    <!-- right-hand trail scene, mirroring the app's hero -->
+    <g transform="translate(660 0)">
+      <rect width="540" height="630" fill="url(#sky)"/>
+      <circle cx="360" cy="118" r="46" fill="#f4c85a"/>
+      <circle cx="360" cy="118" r="58" fill="#ffe58e" opacity="0.22"/>
+      <g fill="rgba(248,245,236,0.8)">
+        <rect x="40" y="96" width="96" height="26" rx="13"/><circle cx="66" cy="98" r="21"/><circle cx="112" cy="102" r="16"/>
+        <rect x="400" y="216" width="70" height="19" rx="10"/><circle cx="419" cy="218" r="15"/><circle cx="452" cy="221" r="11"/>
+      </g>
+      <polygon points="230,150 400,400 60,400" fill="#8ab09c"/>
+      <polygon points="120,120 330,420 -90,420" fill="#679d82"/>
+      <polygon points="120,120 168,190 72,190" fill="#e9eee2"/>
+      <path d="M0 452 L540 400 L540 630 L0 630 Z" fill="#659274"/>
+      <path d="M-20 600 C 120 560, 210 520, 300 470 S 460 385, 560 350"
+            fill="none" stroke="#c7b58d" stroke-width="58" stroke-linecap="round"/>
+      <path d="M-20 600 C 120 560, 210 520, 300 470 S 460 385, 560 350"
+            fill="none" stroke="#eadbb7" stroke-width="42" stroke-linecap="round"/>
+      <circle cx="92" cy="566" r="16" fill="#e56f3d" stroke="#fff5da" stroke-width="7"/>
+      <circle cx="248" cy="497" r="16" fill="#e56f3d" stroke="#fff5da" stroke-width="7"/>
+      <circle cx="422" cy="392" r="23" fill="#f1bd4a"/>
+      <text x="422" y="401" text-anchor="middle" font-family="Manrope, Helvetica, sans-serif" font-size="24" fill="#173f37">★</text>
+      <g fill="#fff0a8" font-size="30" font-family="Helvetica, sans-serif">
+        <text x="470" y="250">✦</text><text x="380" y="560">✦</text><text x="150" y="300">✦</text>
+      </g>
+    </g>
+
+    <!-- copy -->
+    <g transform="translate(76 0)">
+      <g transform="rotate(-3 46 122)">
+        <rect x="10" y="90" width="76" height="76" rx="20" fill="#d7a847"/>
+        <rect x="6" y="86" width="76" height="76" rx="20" fill="#173f37"/>
+        <text x="44" y="138" text-anchor="middle" font-family="Manrope, Helvetica, sans-serif"
+              font-size="38" font-weight="800" fill="#fff5dd">S</text>
+      </g>
+      <text x="102" y="122" font-family="Manrope, Helvetica, sans-serif" font-size="30" font-weight="800" fill="#173f37">Spell Trail</text>
+      <text x="102" y="150" font-family="DM Sans, Helvetica, sans-serif" font-size="16" fill="#52635d">spelltrail.app</text>
+
+      <text font-family="Manrope, Helvetica, sans-serif" font-size="60" font-weight="800" fill="#173f37" letter-spacing="-2">
+        <tspan x="6" y="290">Spelling that feels</tspan>
+        <tspan x="6" y="356">like a <tspan fill="#e56f3d">walk</tspan>, not</tspan>
+        <tspan x="6" y="422">a worksheet.</tspan>
+      </text>
+
+      <text font-family="DM Sans, Helvetica, sans-serif" font-size="21" fill="#3f544c">
+        <tspan x="6" y="480">Five-minute trails · 384 hand-authored words</tspan>
+        <tspan x="6" y="512">No accounts · No ads · Open source</tspan>
+      </text>
+    </g>
+  </g>
+</svg>

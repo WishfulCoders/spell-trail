@@ -1,264 +1,142 @@
-# Spell Trail
+<div align="center">
 
-A calm, local-first spelling game designed around short practice sessions. Questions
-mix listening, recognition, missing-letter, and chunk-building activities, with typing
-checkpoints spaced evenly through each trail.
+# 🏕️ Spell Trail
 
-**Live: https://spelltrail.app**
+**A calm, local-first spelling game built for short practice sessions.**
 
-## Where things stand
+[**Play free at spelltrail.app →**](https://spelltrail.app)
 
-| | |
-| --- | --- |
-| Live at | `spelltrail.app`, `www.spelltrail.app`, `spell-trail.wishfulcoders.workers.dev` |
-| Cloudflare account | wishfulcoders@gmail.com (`4fb16a58f8142b7c35c5b55fcc17b033`) |
-| Zone | `spelltrail.app`, active, TLS auto-renewed by Cloudflare |
-| Storage | `BACKUPS` KV (`7b15846d1e874de0b8a787d2d2cb5139`) — optional backups only |
-| Repo | `github.com:jlaw9/spell-trail`, committed directly to `main` |
+[About the project](https://about.spelltrail.app) ·
+[Privacy](https://spelltrail.app) ·
+[A Wishful Coders app](https://wishfulcoders.com)
 
-Shipped: six tiers of 64 words, five question modes, review camp, in-session
-correction, an "I don't know" escape on every question, per-trail passed-off counts,
-up to six player profiles, parent-entered word lists, firefly-bought companions,
-backup codes, per-player session length, voice selection, a levelling curve with a
-level-up celebration, and a privacy page.
+[![License: AGPL v3](https://img.shields.io/badge/license-AGPL--3.0-e56f3d.svg)](./LICENSE)
+[![Commercial license available](https://img.shields.io/badge/commercial%20license-available-f1bd4a.svg)](./COMMERCIAL-LICENSE.md)
+![No accounts](https://img.shields.io/badge/accounts-none-74ad82.svg)
+![Runs offline](https://img.shields.io/badge/data-stays%20on%20device-74ad82.svg)
 
-Known gaps, in the order worth fixing:
+</div>
 
-- **`Always Use HTTPS` is off** for the zone, so `http://spelltrail.app` serves over
-  plaintext instead of redirecting. Fix in Cloudflare → SSL/TLS → Edge Certificates. It
-  needs dashboard access; the wrangler token cannot change zone settings.
-- **The backup API has no rate limiting.** Codes have roughly 10^11 combinations so
-  brute force is impractical, but a Cloudflare rate-limiting rule on `/api/backup/*`
-  would close it properly.
-- **`missedModes` is recorded but unused.** `awardAnswer` counts which mode each word
-  was missed in. Review camp does not read it yet; weighting a review question towards
-  the mode a word keeps failing in is the obvious next use.
+---
 
-## Run it
+Most spelling apps are a worksheet with a progress bar bolted on. Spell Trail is built
+around a different idea: a **trail** of eight or so words that takes about five minutes,
+asks for each word in a way that suits it, and quietly brings back the ones that were
+missed until they stick.
+
+No accounts, no ads, no sign-up wall. A child's progress lives in their own browser, and
+the only thing that ever leaves the device is a backup a grown-up explicitly asks for.
+
+## What's in it
+
+- **Five question modes.** Listen and spot the right spelling, fill the missing syllable
+  chunk, build the word from its chunks, and two ways of recalling the whole word — a
+  typing checkpoint, and *memory trail*, which flashes the word and asks for it back from
+  memory.
+- **Recall checkpoints, spaced.** Every trail spaces its whole-word questions evenly and
+  alternates between the two recall modes, so each trail asks for a word twice in two
+  different ways instead of clustering the hard ones at the end.
+- **Review camp.** A missed word joins review camp immediately and only leaves after two
+  clean answers — because a word can be right ten times and still have been missed this
+  morning. The neediest words come up first.
+- **Correction inside the trail.** A missed word comes back before the trail ends, one
+  step easier than the mode that caught it. Second looks count towards review but never
+  towards the streak, so the accuracy number stays honest.
+- **384 hand-authored words** across six tiers. Every word carries a sentence, syllable
+  chunks, two *plausible* misspellings, and a fill-the-gap blank. The decoys are written
+  by hand, because generated ones tend to be non-words a child can rule out without
+  knowing the spelling.
+- **Bring your own list.** A grown-up can paste in this week's school spelling list and
+  it plays every game mode — the app syllabifies each word and generates its decoys.
+- **Up to six players** on one device, each with their own progress, badges, word lists,
+  trail length, and companion.
+- **Fireflies and companions.** One firefly per correct answer, two on a streak. They buy
+  cosmetic trail companions — nothing in the word list is ever locked behind them.
+- **Accessible by default.** 44px touch targets, visible focus rings, right/wrong marked
+  with a glyph as well as a colour, `prefers-reduced-motion` respected, and every mode
+  has a written fallback for devices with no speech voices.
+
+## Privacy, in one paragraph
+
+There are no accounts and no analytics beyond Cloudflare's cookieless Web Analytics,
+which is disclosed by name in the app. Progress is `localStorage` on the device. Backup
+is opt-in: it mints a random four-part code like `otter-sequoia-thicket-3341`, stores the
+profile blob under that code, and the code is the only key — anyone holding it can read
+that backup, which the UI says plainly. Backups can be deleted from the same panel and
+expire after two years. Some browsers synthesise speech in the cloud, so the word and its
+sentence go to the browser maker; that's disclosed too. The fonts are self-hosted so even
+they don't phone home.
+
+## Running it locally
 
 ```bash
 npm install
 npm run dev
 ```
 
-Progress lives in the browser with `localStorage`. There are no accounts. The only thing that
-leaves the device is an optional backup the grown-up asks for — see **Backup** below.
-
-## How a trail is built
-
-`src/game.js` owns the round. Three inputs are independent, so a new game mode only
-has to supply one of them:
-
-- **Words** — `buildRound({ words })` takes any list: a tier, a custom pack, or the
-  review queue.
-- **Length** — `length` clamps to the pool, so a five-word pack makes a five-word trail.
-- **Modes** — `planModes(length)` spaces *recall checkpoints* evenly and rotates the
-  three supported modes between them. A checkpoint alternates between typing what you
-  hear and memory trail, so a trail asks for the whole word twice in two different
-  ways. At length 8 that is one of each, at indices 3 and 7; at length 3 it is one.
-
-Each mode declares what a word must carry (`MODE_REQUIREMENTS`). A word with no
-syllable chunks cannot be a build-the-word question, so `resolveMode` steps down
-`MODE_DIFFICULTY` rather than rendering something unanswerable. The same guard covers
-devices with no speech voices: typing questions become memory-trail questions, which
-need no audio, and written clues are shown instead.
-
-`src/modes.jsx` holds the per-mode React components and the registry that maps a mode
-name to its component and copy. Memory trail shows the word for `peekMs(word)` — longer
-words get longer, capped at five seconds — then hides it and asks for it typed.
-
-Both recall modes share `SpellingInput`, which focuses itself on mount so the keyboard is
-already up when a checkpoint asks the child to type. iOS only raises the keyboard when
-the focus happens inside the tap that mounted the input, which covers the typing
-checkpoint and memory trail's "hide it" button, but not memory trail's timer expiring on
-its own — there the child taps the field once.
-
-## Review camp
-
-A word joins review camp the moment it is missed and leaves after `REVIEW_CLEAR` (2)
-whole-word recall answers, tracked per word as `sinceWrong`. Multiple-choice and chunk
-questions do not advance that counter, so two lucky picks cannot clear a word the child
-has not spelled. A correct memory-trail second look does count.
-
-Because only recall clears a word, a review trail has to *ask* for recall far more often
-than an ordinary one — `REVIEW_RECALL_SHARE` (0.5) against `RECALL_SHARE` (0.25).
-Without that the exit is gated on a question the trail rarely asks: at the ordinary
-share a perfect player needs about twelve trails to empty an eight-word camp, against
-seven at the review share, and any new mistakes refill it faster than that drains. Two
-tests in `src/game.test.js` walk a seeded player through review trails and hold the
-line on both the absolute count and the comparison.
-
-`reviewWords(progress, pool)` returns the missed words neediest-first — fewest recall
-answers since the miss, then the freshest mistake. `App.jsx` passes it every word the
-player could have met (the six tiers plus their own lists) and shows the track on the
-trail map only when it holds something. A review trail takes the words at the *front*
-of that list rather than sampling it, so the neediest words come up first.
-
-## Correction
-
-A missed word comes back before the trail ends, once, one step easier than the mode it
-was missed in (`easierMode` walks `MODE_DIFFICULTY` down from typing toward
-listen-and-choose). Second looks are scored as practice: they update the word record,
-and whole-word recall retries advance Review Camp. They do not move the streak or
-accuracy counters, which describe first attempts only.
-
-## Word data
-
-`src/words.js` has six tiers of sixty-four words (384 in total). Every entry carries a sentence,
-syllable chunks, two plausible misspellings, and an authored fill-the-gap blank. Decoys
-are hand-written because generated ones tend to be non-words a player can eliminate
-without knowing the spelling. `src/game.test.js` enforces the invariants — chunks must
-rejoin into the word, the sentence must contain it, and every blank must offer three
-distinct options including the answer.
-
-Trails draw their words from a pool of sixty-four, so replaying a tier gives a mostly
-different set each time. A test fails the build if any word appears in two tiers.
-
-## Players and custom word lists
-
-Up to six players share a device, each with separate progress, badges, companions, and
-word lists. A save from the earlier single-player version is migrated into the first
-profile rather than discarded. Names and companions are editable under **Players & word
-lists**.
-
-Grown-ups can type in a weekly spelling list under **Players & word lists**. Entries are
-one per line or comma-separated, and `word: sentence` supplies your own sentence.
-`src/wordgen.js` syllabifies each word and generates misspellings so a bare list still
-plays every game mode.
-
-## Levelling
-
-`xpForLevelUp(level)` grows geometrically from 350 XP, capped at 2500 so high levels stay
-reachable. A default eight-word trail is worth roughly 105-155 XP, so level 2 arrives after two
-to three trails and each level after that takes a little longer. Crossing a level pays a firefly
-bonus (`levelUpBonus`) rather than XP, so the reward feeds the companion shop instead of
-compounding back into the curve it came from. `settleLevelUps` awards every level crossed, so a
-single answer that jumps two still pays both.
-
-Players from the old flat 120-XP-per-level curve are converted once on load (`migrateXp`, guarded
-by `xpCurve`), keeping both their level and their progress through it. Raw XP numbers change;
-the level a child sees does not.
-
-## Fireflies
-
-Fireflies are the soft currency — one per correct answer, two on a streak of three or
-more. They buy trail companions (`src/shop.js`), which set the player's icon and are
-cosmetic only: nothing in the word list is ever gated behind them. Prices climb from 20
-to 600 so the first companion lands in a couple of trails and the last is a long goal.
-Three are free, so a new player always starts owning their own icon.
-
-## Words per session
-
-Each player has their own trail length (3, 5, 8, 12, or 16 words), set under **Players & word
-lists**. `clampRoundLength` snaps any stored value to one of those, so the typing-checkpoint
-plan stays predictable. Missed words still come back for a second look, so a trail can run
-slightly longer than the number chosen.
-
-## Voice
-
-Speech uses the browser's built-in synthesis. Browsers pick a default voice that is usually the
-oldest and most robotic one installed, so `src/speech.js` scores the available English voices —
-rewarding Natural / Neural / Premium / Enhanced / Google voices, penalising Compact and the
-macOS novelty voices — and uses the best one. Grown-ups can override the choice, and the
-selection is per device rather than per player.
-
-## Backup
-
-There are no accounts. Backing up mints a random four-part code (`otter-sequoia-thicket-3341`)
-and stores the profile blob in Cloudflare KV under that code. Entering the code on another
-device pulls it down. No email, no password, and nothing identifying beyond the nicknames
-already typed in.
-
-The trade-off, stated in the UI: the code is the only key, so anyone holding it can read that
-backup. Restoring replaces everything on the device.
-
-A backup can be deleted from the same panel, which removes the only copy held online. Untouched
-backups expire after two years.
-
-`worker/index.js` serves `POST /api/backup`, `GET /api/backup/:code`, and
-`DELETE /api/backup/:code`, falling through to static assets for everything else. The KV
-namespace is bound as `BACKUPS` in `wrangler.jsonc`.
-
-## Privacy
-
-`src/App.jsx` has a `Privacy` view linked from the footer and from the backup panel. It is the
-user-facing statement of everything above and **must be updated whenever data handling changes**.
-Two things in it are easy to get wrong and worth preserving:
-
-- Some browsers, including Chrome's better voices, synthesise speech in the cloud, so the word
-  and its sentence go to the browser maker. That is disclosed.
-- Cloudflare Web Analytics is disclosed by name. If it is ever switched off, remove that section
-  rather than leaving the page overstating what is collected.
-
-## Fonts
-
-DM Sans and Manrope are self-hosted from `public/fonts` as latin-subset variable fonts
-(about 60 kB total, one file per family) and preloaded in `index.html`, so no font network
-is involved.
-
-The one third-party request the site makes is the Cloudflare Web Analytics beacon, which
-Cloudflare injects at the edge on the `spelltrail.app` zone (it does not appear on
-`workers.dev`). It is cookieless and does not identify visitors, and the privacy page says
-so explicitly. Turning off Web Analytics auto-install for the zone would remove it — if
-that ever happens, update the privacy page to match.
-
-## Checks
-
-```bash
-npm test
-```
-
-```bash
-npm run build
-```
-
-## Supporting the project
-
-The heart in the footer and the card in the grown-ups area both point at `SUPPORT_URL`, a single
-exported constant at the top of `src/App.jsx`. Change it there and both follow.
-
-## The studio line
-
-The footer carries **A Wishful Coders app**, linking to `STUDIO_URL`
-(`https://wishfulcoders.com`) — the same wording and link every Wishful Coders app should
-use, so the studio reads the same wherever someone meets it. Markup is
-`<a class="studio-line">A <b>Wishful Coders</b> app</a>`.
-
-## Deploy
-
-The Worker serves the API and the static build together. It lives on the
-**wishfulcoders@gmail.com** Cloudflare account (`account_id` is pinned in `wrangler.jsonc`
-because that login can see more than one account), alongside the `spelltrail.app` zone.
-
-```bash
-npm run deploy
-```
-
-To run the API locally (the plain `npm run dev` Vite server has no Worker, so backup calls 404):
+That's a plain Vite dev server, which is everything except the backup API. To run the
+Cloudflare Worker that serves the API alongside the built app:
 
 ```bash
 npx wrangler dev
 ```
 
-## Email
-
-`support@spelltrail.app` forwards to `wishfulcoders@gmail.com` through Cloudflare Email
-Routing, so the address a family sees on the privacy page is the app's own rather than a
-personal mailbox. It is exported as `SUPPORT_EMAIL` at the top of `src/App.jsx` — change
-it there and add a matching routing rule. Nothing in the app sends or receives mail:
-this is DNS and a routing rule, not code, and the Worker has no `email()` handler.
+Tests and a production build:
 
 ```bash
-npx wrangler email routing settings spelltrail.app   # enabled / status
-npx wrangler email routing rules list spelltrail.app # who forwards where
+npm test
+npm run build
 ```
 
-The zone previously used Namecheap's forwarders. Cloudflare refuses to enable while
-foreign MX records are present, so those (`eforward1-5.registrar-servers.com`) and their
-SPF TXT were deleted first; enabling then published Cloudflare's own MX, SPF, and DKIM
-records. The catch-all is **disabled and set to drop**, so only `support@` is delivered
-and mail to any other address at the domain bounces — turn the catch-all on if that is
-ever not what you want.
+## How it's built
 
-Note the wrangler OAuth token can manage routing (`email_routing:write`) but holds no
-DNS record scope, so DNS edits still need the dashboard or a `Zone → DNS → Edit` token.
+| | |
+| --- | --- |
+| **App** | React 18 + Vite, no router, no state library |
+| **Backend** | One Cloudflare Worker (`worker/index.js`) — three endpoints, all for backups |
+| **Storage** | `localStorage` on device; Cloudflare KV for opt-in backup blobs |
+| **Speech** | The browser's own `SpeechSynthesis`, with voice scoring in `src/speech.js` |
+| **Tests** | Vitest, including invariant tests over all 384 words |
+| **Landing site** | One hand-written HTML file in `site/`, on GitHub Pages |
+
+The interesting part is `src/game.js`. A round has three independent inputs — the word
+list, the length, and the mode plan — so a new game mode only has to supply one of them,
+and each mode declares what a word must carry (`MODE_REQUIREMENTS`). A word with no
+syllable chunks can't be a build-the-word question, so the planner steps *down* a
+difficulty ladder rather than rendering something unanswerable. The same guard is what
+makes the app work on a device with no speech voices at all.
+
+[CLAUDE.md](./CLAUDE.md) has the full architecture notes, the design reasoning behind
+review camp and the XP curve, and the deployment/ops detail.
+
+## Contributing
+
+Contributions are welcome — see [CONTRIBUTING.md](./CONTRIBUTING.md). New words for the
+tiers, new question modes, and accessibility fixes are all especially useful. Because the
+project is dual-licensed, contributors are asked to agree to the [CLA](./CLA.md); it's a
+one-time thing.
+
+Found a security issue? [SECURITY.md](./SECURITY.md) has the disclosure address.
+
+## License
+
+Spell Trail is **dual-licensed**:
+
+- **[AGPL-3.0](./LICENSE)** — free to use, study, modify, and share. If you distribute a
+  derived version, or run a modified version as a network service, you publish your
+  source too.
+- **[Commercial license](./COMMERCIAL-LICENSE.md)** — for building a closed-source
+  product on this code, or hosting it without publishing your source.
+  <licensing@wishfulcoders.com>
+
+The **name and branding are not open source.** "Spell Trail" and "Wishful Coders" are
+trademarks; the license grants you rights to the code, not to the brand. Fork it, ship
+it, just don't call it Spell Trail.
+
+<div align="center">
+
+---
+
+A **[Wishful Coders](https://wishfulcoders.com)** app · © Wishful Coders LLC
+
+</div>
