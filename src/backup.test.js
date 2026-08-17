@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isValidCode, loadBackup, normalizeCode, packStore, saveBackup, unpackStore } from './backup.js'
+import { deleteBackup, isValidCode, loadBackup, normalizeCode, packStore, saveBackup, unpackStore } from './backup.js'
 import { makeCode } from '../worker/index.js'
 import { addProfile, emptyStore } from './profiles.js'
 import { clampRoundLength, ROUND_LENGTH, ROUND_LENGTH_OPTIONS } from './game.js'
@@ -82,6 +82,32 @@ describe('backup transport', () => {
   it('reports a network failure without losing local data', async () => {
     const fetcher = async () => jsonResponse({}, 500)
     await expect(saveBackup(emptyStore(), null, fetcher)).rejects.toThrow(/Could not reach/)
+  })
+})
+
+describe('deleting a backup', () => {
+  it('sends a DELETE for the normalized code', async () => {
+    const calls = []
+    const fetcher = async (url, init) => { calls.push({ url, method: init?.method }); return jsonResponse({ deleted: true }) }
+    await deleteBackup('OTTER SUMMIT RIDGE 4821', fetcher)
+    expect(calls[0]).toEqual({ url: '/api/backup/otter-summit-ridge-4821', method: 'DELETE' })
+  })
+
+  it('treats an already-missing backup as deleted', async () => {
+    const fetcher = async () => jsonResponse({ error: 'not-found' }, 404)
+    await expect(deleteBackup('otter-summit-ridge-4821', fetcher)).resolves.toMatchObject({ deleted: true })
+  })
+
+  it('refuses a malformed code without calling the service', async () => {
+    let called = false
+    const fetcher = async () => { called = true; return jsonResponse({}) }
+    await expect(deleteBackup('nope', fetcher)).rejects.toThrow(/backup code/)
+    expect(called).toBe(false)
+  })
+
+  it('surfaces a server failure rather than claiming success', async () => {
+    const fetcher = async () => jsonResponse({}, 500)
+    await expect(deleteBackup('otter-summit-ridge-4821', fetcher)).rejects.toThrow(/Could not reach/)
   })
 })
 

@@ -257,3 +257,13 @@ footer button.danger { color: #9a3412; font-weight: 800; text-decoration: none; 
   .length-choice { min-width: 62px; }
   .support-card { padding: 17px; }
 }
+
+/* privacy note */
+.privacy-shell { max-width: 720px; }
+.prose h2 { margin: 26px 0 8px; font-size: 19px; letter-spacing: -.4px; }
+.prose h2:first-child { margin-top: 0; }
+.prose p { margin: 0 0 12px; color: #3f544c; font-size: 15px; line-height: 1.65; }
+.prose ul { margin: 0 0 12px; padding-left: 20px; color: #3f544c; font-size: 15px; line-height: 1.75; }
+.prose a { color: #1f6f63; }
+.prose-note { color: #55635e !important; font-size: 12px !important; }
+.inline-link { border: 0; padding: 0; background: transparent; color: #1f6f63; font: inherit; text-decoration: underline; cursor: pointer; }

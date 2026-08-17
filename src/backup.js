@@ -51,6 +51,16 @@ export async function saveBackup(store, code = null, fetcher = fetch) {
   return { code: body.code, savedAt: body.savedAt }
 }
 
+export async function deleteBackup(rawCode, fetcher = fetch) {
+  const code = normalizeCode(rawCode)
+  if (!isValidCode(code)) throw new Error(MESSAGES['bad-code'])
+  const response = await fetcher(`/api/backup/${code}`, { method: 'DELETE' })
+  // A backup that is already gone is the outcome the caller wanted.
+  if (response.status === 404) return { code, deleted: true }
+  if (!response.ok) throw new Error(friendly(await readError(response)))
+  return { code, deleted: true }
+}
+
 export async function loadBackup(rawCode, fetcher = fetch) {
   const code = normalizeCode(rawCode)
   if (!isValidCode(code)) throw new Error(MESSAGES['bad-code'])

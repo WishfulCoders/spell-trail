@@ -42,7 +42,7 @@ import {
   ownsCompanion,
 } from './shop.js'
 import { bestVoiceUri, listVoices, onVoicesChanged, speak, speechReady, stopSpeaking } from './speech.js'
-import { loadBackup, saveBackup } from './backup.js'
+import { deleteBackup, loadBackup, saveBackup } from './backup.js'
 import { MAX_PACK_WORDS, buildPackWords, parseEntries } from './wordgen.js'
 import { DEFAULT_TIER_ID, WORD_TIERS } from './words.js'
 
@@ -518,7 +518,7 @@ function VoicePicker({ store, audio, onVoice }) {
   )
 }
 
-function BackupPanel({ store, onRestore }) {
+function BackupPanel({ store, onRestore, onShowPrivacy }) {
   const [code, setCode] = useState('')
   const [status, setStatus] = useState(null)
   const [busy, setBusy] = useState(false)
@@ -542,7 +542,8 @@ function BackupPanel({ store, onRestore }) {
       <p className="field-help">
         There is no account and no password. Backing up gives you a code — keep it somewhere safe,
         and enter it on another device to bring everything across. Anyone with the code can read
-        that backup, so treat it like a key.
+        that backup, so treat it like a key.{' '}
+        <button className="inline-link" type="button" onClick={onShowPrivacy}>What is stored?</button>
       </p>
 
       <div className="backup-actions">
@@ -559,6 +560,18 @@ function BackupPanel({ store, onRestore }) {
           {busy ? 'Working…' : savedCode ? 'Update my backup' : 'Back up now'}
         </button>
         {savedCode ? <code className="backup-code">{savedCode}</code> : null}
+        {savedCode ? (
+          <ConfirmButton
+            className="tiny-button"
+            label="Delete backup"
+            confirmLabel="Tap again to delete it"
+            onConfirm={() => run(async () => {
+              await deleteBackup(savedCode)
+              onRestore({ backupCode: null })
+              setStatus({ tone: 'good', text: 'Backup deleted. Nothing of yours is stored online now.' })
+            })}
+          />
+        ) : null}
       </div>
 
       <form
@@ -588,6 +601,76 @@ function BackupPanel({ store, onRestore }) {
 
       {status ? <p className={`backup-status ${status.tone}`} role="status">{status.text}</p> : null}
     </section>
+  )
+}
+
+function Privacy({ onBack }) {
+  return (
+    <main className="rewards-shell privacy-shell">
+      <button className="back-button" type="button" onClick={onBack}>← Trail map</button>
+      <div className="rewards-heading">
+        <span className="soft-label">PRIVACY</span>
+        <h1>What Spell Trail keeps</h1>
+        <p>The short version: almost nothing, and nothing at all unless you ask for a backup.</p>
+      </div>
+
+      <section className="family-card prose">
+        <h2>On your device</h2>
+        <p>
+          Player names, progress, badges, companions, and any spelling lists you type in are saved
+          in this browser only. They are not sent anywhere. Clearing your browser data removes them.
+        </p>
+        <p>
+          Use a first name or a nickname. Spell Trail never asks for a surname, a birthday, a school,
+          an email address, or a password, and there is nowhere to enter one.
+        </p>
+
+        <h2>If you make a backup</h2>
+        <p>
+          Backing up is the only thing that sends data off your device, and only when you tap the
+          button. It uploads your players — their names, progress, and word lists — and stores them
+          against a random code on Cloudflare, which hosts this app.
+        </p>
+        <p>
+          The code is the only key. There is no account attached to it, so we cannot tell you who a
+          backup belongs to, and anyone who has your code can read it. Keep it like a house key.
+          Delete a backup any time from <b>Players &amp; word lists</b>. Backups you never touch
+          again are removed automatically after two years.
+        </p>
+
+        <h2>Reading words aloud</h2>
+        <p>
+          Spell Trail asks your browser to read words out. Some browsers do this on the device and
+          some — including Chrome&apos;s higher quality voices — send the word to the browser maker to
+          be turned into audio. That is the browser&apos;s doing, not ours, and it receives only the
+          word and its example sentence. If you would rather keep everything local, pick a voice
+          marked as an on-device or local voice in the voice list.
+        </p>
+
+        <h2>What we do not do</h2>
+        <ul>
+          <li>No accounts, no sign-in, no passwords.</li>
+          <li>No advertising, and nothing is ever sold or shared with advertisers.</li>
+          <li>No analytics, no tracking pixels, no third-party scripts.</li>
+          <li>No cookies. Fonts are served from this site, not from a font network.</li>
+        </ul>
+
+        <h2>Children</h2>
+        <p>
+          Spell Trail is built for children to use with a grown-up nearby. Because there are no
+          accounts and we collect nothing that identifies a child, we hold no personal profile of
+          your family. If you back up and later want it gone, delete it with your code — that
+          removes everything we hold.
+        </p>
+
+        <h2>Questions</h2>
+        <p>
+          Email <a href="mailto:wishfulcoders@gmail.com">wishfulcoders@gmail.com</a>. This page will
+          be dated and updated if any of the above changes.
+        </p>
+        <p className="prose-note">Last updated 17 August 2026.</p>
+      </section>
+    </main>
   )
 }
 
@@ -718,7 +801,7 @@ function ProfileEditor({ profile, onRename, onPickAvatar, onDone }) {
 
 function Family({
   store, profile, audio, onBack, onSwitch, onAddProfile, onRemoveProfile, onRename, onPickAvatar,
-  onAddPack, onRemovePack, onSavePack, onResetProfile, onRoundLength, onVoice, onRestoreStore,
+  onAddPack, onRemovePack, onSavePack, onResetProfile, onRoundLength, onVoice, onRestoreStore, onShowPrivacy,
 }) {
   const [newName, setNewName] = useState('')
   const [editingId, setEditingId] = useState(null)
@@ -803,7 +886,7 @@ function Family({
 
       <SessionLength profile={profile} onRoundLength={onRoundLength} />
       <VoicePicker store={store} audio={audio} onVoice={onVoice} />
-      <BackupPanel store={store} onRestore={onRestoreStore} />
+      <BackupPanel store={store} onRestore={onRestoreStore} onShowPrivacy={onShowPrivacy} />
       <SupportCard />
 
       <section className="family-card danger-card">
@@ -890,6 +973,7 @@ export default function App() {
       {view === 'complete' && summary ? (
         <Complete summary={summary} progress={profile.progress} newBadges={newBadges} onHome={() => setView('home')} onReplay={() => setView('game')} />
       ) : null}
+      {view === 'privacy' ? <Privacy onBack={() => setView('home')} /> : null}
       {view === 'rewards' ? (
         <Rewards
           profile={profile}
@@ -919,11 +1003,13 @@ export default function App() {
           onRoundLength={(length) => setStore((current) => setRoundLength(current, current.activeId, length))}
           onVoice={(uri) => setStore((current) => setVoice(current, uri))}
           onRestoreStore={(changes) => setStore((current) => ({ ...current, ...changes }))}
+          onShowPrivacy={() => setView('privacy')}
         />
       ) : null}
       <footer>
         <span>{saveFailed ? 'Progress cannot be saved in this browser window.' : 'Spell Trail saves progress on this device.'}</span>
         <button type="button" onClick={() => setView('family')}>Players & word lists</button>
+        <button type="button" onClick={() => setView('privacy')}>Privacy</button>
         <a className="footer-heart" href={SUPPORT_URL} target="_blank" rel="noopener noreferrer">
           <span aria-hidden="true">♥</span> Support the developer
         </a>

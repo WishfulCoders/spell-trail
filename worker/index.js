@@ -81,6 +81,14 @@ async function handleSave(request, env) {
   return json({ code, savedAt: Date.now() })
 }
 
+async function handleDelete(code, env) {
+  if (!isValidCode(code)) return json({ error: 'bad-code' }, 400)
+  const existing = await env.BACKUPS.get(code)
+  if (!existing) return json({ error: 'not-found' }, 404)
+  await env.BACKUPS.delete(code)
+  return json({ code, deleted: true })
+}
+
 async function handleLoad(code, env) {
   if (!isValidCode(code)) return json({ error: 'bad-code' }, 400)
   const payload = await env.BACKUPS.get(code)
@@ -98,6 +106,9 @@ export default {
     }
     if (url.pathname.startsWith('/api/backup/') && request.method === 'GET') {
       return handleLoad(normalizeCode(url.pathname.slice('/api/backup/'.length)), env)
+    }
+    if (url.pathname.startsWith('/api/backup/') && request.method === 'DELETE') {
+      return handleDelete(normalizeCode(url.pathname.slice('/api/backup/'.length)), env)
     }
     return json({ error: 'not-found' }, 404)
   },

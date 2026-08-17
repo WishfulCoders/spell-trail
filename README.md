@@ -97,8 +97,18 @@ already typed in.
 The trade-off, stated in the UI: the code is the only key, so anyone holding it can read that
 backup. Restoring replaces everything on the device.
 
-`worker/index.js` serves `/api/backup` and falls through to static assets for everything else.
-The KV namespace is bound as `BACKUPS` in `wrangler.jsonc`.
+A backup can be deleted from the same panel, which removes the only copy held online. Untouched
+backups expire after two years.
+
+`worker/index.js` serves `POST /api/backup`, `GET /api/backup/:code`, and
+`DELETE /api/backup/:code`, falling through to static assets for everything else. The KV
+namespace is bound as `BACKUPS` in `wrangler.jsonc`.
+
+## Privacy
+
+`src/App.jsx` has a `Privacy` view linked from the footer and from the backup panel. It is the
+user-facing statement of everything above and should be updated whenever data handling changes —
+including the note that some browsers synthesise speech in the cloud rather than on device.
 
 ## Fonts
 
