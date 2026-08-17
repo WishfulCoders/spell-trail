@@ -12,7 +12,10 @@ import {
   levelProgress,
   makeRetry,
   newProgress,
+  passedCount,
+  reviewWords,
   settleLevelUps,
+  UNKNOWN_ANSWER,
   xpIntoLevel,
   xpToNextLevel,
 } from './game.js'
@@ -53,6 +56,15 @@ import { DEFAULT_TIER_ID, WORD_TIERS } from './words.js'
 // Change this one line to point the heart somewhere else.
 export const SUPPORT_URL = 'https://buymeacoffee.com/wishfulcoder'
 
+// The studio line every Wishful Coders app carries. Same words, same link,
+// wherever it appears — the point is that it reads identically across apps.
+export const STUDIO_URL = 'https://wishfulcoders.com'
+
+// Forwards to the studio inbox through Cloudflare Email Routing, so the address
+// a family sees is the app's own rather than someone's personal mailbox. See
+// the README's Email section — changing this needs a matching routing rule.
+export const SUPPORT_EMAIL = 'support@spelltrail.app'
+
 const VOICE_POLL_MS = 250
 const VOICE_GIVE_UP_MS = 4000
 
@@ -80,9 +92,30 @@ function useAudioAvailable() {
   return available
 }
 
-// A trail can be drawn from a built-in tier or from a pack the grown-up typed
-// in. Everything downstream only needs { label, color, words }.
-function resolveSource(selection, profile) {
+// Review camp is not a word list of its own — it is whichever words this
+// player has missed, gathered from everywhere they could have met one.
+export const REVIEW_COLOR = '#b4713c'
+
+const ALL_TIER_WORDS = WORD_TIERS.flatMap((tier) => tier.words)
+
+// A pack word that repeats a tier word keeps the tier's richer entry, so review
+// camp asks it in every mode rather than only the ones a typed-in word supports.
+function knownWords(profile) {
+  const seen = new Map()
+  for (const entry of [...ALL_TIER_WORDS, ...profile.packs.flatMap((pack) => pack.words)]) {
+    if (!seen.has(entry.word)) seen.set(entry.word, entry)
+  }
+  return [...seen.values()]
+}
+
+// A trail can be drawn from a built-in tier, from a pack the grown-up typed in,
+// or from review camp. Everything downstream only needs { label, color, words }.
+function resolveSource(selection, profile, review) {
+  // `priority` says the list is already ordered by need, so a round takes the
+  // words at the front instead of sampling the whole pool at random.
+  if (selection?.kind === 'review' && review.length) {
+    return { kind: 'review', id: 'review', label: 'Review Camp', color: REVIEW_COLOR, icon: '🏕️', words: review, priority: true }
+  }
   if (selection?.kind === 'pack') {
     const pack = profile.packs.find((entry) => entry.id === selection.id)
     if (pack) return { kind: 'pack', id: pack.id, label: pack.name, color: profile.color, icon: '📝', words: pack.words }
@@ -114,7 +147,37 @@ function Header({ profile, onHome, onSwitch, view }) {
   )
 }
 
-function Home({ profile, selection, source, onSelect, onStart, onShowRewards, onShowFamily }) {
+// A track is a tier or a word pack. Tapping one selects it; the selected one
+// opens up to show the start button, so choosing and starting are the same
+// gesture in the same place rather than a trip back to the top of the page.
+// `note` replaces the passed-off bar for a track where that count means nothing
+// — review camp shrinks as words are learned rather than filling up.
+function TrackCard({ track, selected, passed, roundLength, note, onSelect, onStart, children }) {
+  const total = track.words.length
+  const pct = total ? Math.round((passed / total) * 100) : 0
+  return (
+    <div className={`tier-card ${track.kind === 'pack' ? 'pack-card' : ''} ${selected ? 'selected' : ''}`} style={{ '--tier-color': track.color }}>
+      <button className="tier-pick" type="button" onClick={onSelect} aria-pressed={selected} aria-expanded={selected}>
+        <span className="tier-icon" aria-hidden="true">{track.icon}</span>
+        {children}
+        <span className="track-progress">
+          {note ? null : <span className="track-bar" aria-hidden="true"><i style={{ width: `${pct}%` }} /></span>}
+          <small>{note || `${passed}/${total} words passed off`}</small>
+        </span>
+        {selected ? null : <span className="tier-state">Choose this trail</span>}
+      </button>
+      {selected ? (
+        <button className="track-start" type="button" onClick={onStart}>
+          <span>Start trail</span>
+          <b>{roundLength} words · 5 min</b>
+          <i aria-hidden="true">→</i>
+        </button>
+      ) : null}
+    </div>
+  )
+}
+
+function Home({ profile, selection, source, review, onSelect, onStart, onShowRewards, onShowFamily }) {
   const { progress } = profile
   const level = levelFromXp(progress.xp)
   const accuracy = progress.wordsPracticed ? Math.round((progress.correctAnswers / progress.wordsPracticed) * 100) : 0
@@ -125,12 +188,12 @@ function Home({ profile, selection, source, onSelect, onStart, onShowRewards, on
         <div className="welcome-copy">
           <span className="soft-label">{profile.name.toUpperCase()}'S ADVENTURE</span>
           <h1>Ready for a quick<br /><em>word quest?</em></h1>
-          <p>{roundLength} small challenges. No timer. You can hear every word as many times as you need.</p>
-          <button className="primary-button" type="button" onClick={onStart}>
-            <span>Start {source.label}</span>
-            <b>{roundLength} words · about 5 min</b>
-            <i aria-hidden="true">→</i>
-          </button>
+          <p>Pick a trail below and tap start. {roundLength} small challenges, no timer, and you can hear every word as many times as you need.</p>
+          <a className="primary-button" href="#choose-level">
+            <span>Choose your trail</span>
+            <b>{WORD_TIERS.length} levels{profile.packs.length ? ` · ${profile.packs.length} list${profile.packs.length === 1 ? '' : 's'} from your grown-up` : ''}</b>
+            <i aria-hidden="true">↓</i>
+          </a>
         </div>
         <div className="hero-art" aria-hidden="true">
           <div className="sun" />
@@ -142,6 +205,29 @@ function Home({ profile, selection, source, onSelect, onStart, onShowRewards, on
         </div>
       </section>
 
+      {review.length ? (
+        <section className="tier-section" aria-labelledby="review-camp">
+          <div className="section-heading">
+            <div><span className="soft-label">SECOND CHANCES</span><h2 id="review-camp">Review camp</h2></div>
+            <p>The words you missed, waiting in one place.</p>
+          </div>
+          <div className="tier-grid">
+            <TrackCard
+              track={{ kind: 'review', label: 'Review Camp', color: REVIEW_COLOR, icon: '🏕️', words: review }}
+              selected={selection.kind === 'review'}
+              roundLength={Math.min(profile.roundLength || ROUND_LENGTH, review.length)}
+              note="Spell one right twice and it leaves camp"
+              onSelect={() => onSelect({ kind: 'review' })}
+              onStart={onStart}
+            >
+              <strong>Review camp</strong>
+              <b>{review.length} word{review.length === 1 ? '' : 's'} waiting</b>
+              <small>{review.slice(0, 4).map((entry) => entry.word).join(', ')}{review.length > 4 ? '…' : ''}</small>
+            </TrackCard>
+          </div>
+        </section>
+      ) : null}
+
       {profile.packs.length ? (
         <section className="tier-section" aria-labelledby="this-week">
           <div className="section-heading">
@@ -149,17 +235,20 @@ function Home({ profile, selection, source, onSelect, onStart, onShowRewards, on
             <p>Spelling lists typed in for you.</p>
           </div>
           <div className="tier-grid">
-            {profile.packs.map((pack) => {
-              const selected = selection.kind === 'pack' && selection.id === pack.id
-              return (
-                <button className={`tier-card pack-card ${selected ? 'selected' : ''}`} style={{ '--tier-color': profile.color }} type="button" key={pack.id} onClick={() => onSelect({ kind: 'pack', id: pack.id })} aria-pressed={selected}>
-                  <span className="tier-icon" aria-hidden="true">📝</span>
-                  <strong>{pack.name}</strong><b>{pack.words.length} words</b>
-                  <small>{pack.words.slice(0, 4).map((entry) => entry.word).join(', ')}{pack.words.length > 4 ? '…' : ''}</small>
-                  <span className="tier-state">{selected ? '✓ Ready to play' : 'Practice this list'}</span>
-                </button>
-              )
-            })}
+            {profile.packs.map((pack) => (
+              <TrackCard
+                key={pack.id}
+                track={{ kind: 'pack', label: pack.name, color: profile.color, icon: '📝', words: pack.words }}
+                selected={selection.kind === 'pack' && selection.id === pack.id}
+                passed={passedCount(progress, pack.words)}
+                roundLength={Math.min(profile.roundLength || ROUND_LENGTH, pack.words.length)}
+                onSelect={() => onSelect({ kind: 'pack', id: pack.id })}
+                onStart={onStart}
+              >
+                <strong>{pack.name}</strong>
+                <small>{pack.words.slice(0, 4).map((entry) => entry.word).join(', ')}{pack.words.length > 4 ? '…' : ''}</small>
+              </TrackCard>
+            ))}
           </div>
         </section>
       ) : null}
@@ -170,17 +259,19 @@ function Home({ profile, selection, source, onSelect, onStart, onShowRewards, on
           <p>Start where words feel doable. You can switch anytime.</p>
         </div>
         <div className="tier-grid">
-          {WORD_TIERS.map((tier, index) => {
-            const selected = selection.kind === 'tier' && selection.id === tier.id
-            return (
-              <button className={`tier-card ${selected ? 'selected' : ''}`} style={{ '--tier-color': tier.color }} type="button" key={tier.id} onClick={() => onSelect({ kind: 'tier', id: tier.id })} aria-pressed={selected}>
-                <span className="tier-number">{String(index + 1).padStart(2, '0')}</span>
-                <span className="tier-icon" aria-hidden="true">{tier.icon}</span>
-                <strong>{tier.label}</strong><b>{tier.grades}</b><small>{tier.description}</small>
-                <span className="tier-state">{selected ? '✓ Ready to play' : 'Choose this path'}</span>
-              </button>
-            )
-          })}
+          {WORD_TIERS.map((tier) => (
+            <TrackCard
+              key={tier.id}
+              track={tier}
+              selected={selection.kind === 'tier' && selection.id === tier.id}
+              passed={passedCount(progress, tier.words)}
+              roundLength={Math.min(profile.roundLength || ROUND_LENGTH, tier.words.length)}
+              onSelect={() => onSelect({ kind: 'tier', id: tier.id })}
+              onStart={onStart}
+            >
+              <strong>{tier.label}</strong><b>{tier.grades}</b><small>{tier.description}</small>
+            </TrackCard>
+          ))}
         </div>
       </section>
 
@@ -219,13 +310,22 @@ function ListenButton({ word, sentence, audio, voiceUri }) {
   return (
     <button className="listen-button" type="button" onClick={() => speak(`${word}. ${sentence}`, { voiceUri })}>
       <span className="sound-waves" aria-hidden="true"><i /><i /><i /><i /></span>
-      <span><b>Hear the word</b><small>Tap as many times as you need</small></span>
+      <span><b>Hear the word</b><small>Tap as often as you need</small></span>
     </button>
   )
 }
 
 function Game({ source, progress, roundLength, onProgress, onComplete, onExit, onLevelUp, audio, voiceUri }) {
-  const [base] = useState(() => buildRound({ words: source.words, length: roundLength, audio }))
+  // A review trail takes the words at the front of its list — the ones that
+  // need it most — instead of sampling every word the player has ever missed.
+  const [base] = useState(() => buildRound({
+    words: source.priority ? source.words.slice(0, roundLength) : source.words,
+    length: roundLength,
+    audio,
+  }))
+  // Review camp empties as its words are learned, which can change the source
+  // under a round in progress — so the trail keeps the name it started with.
+  const [label] = useState(source.label)
   const [retries, setRetries] = useState([])
   const [index, setIndex] = useState(0)
   const [feedback, setFeedback] = useState(null)
@@ -274,7 +374,7 @@ function Game({ source, progress, roundLength, onProgress, onComplete, onExit, o
         score: base.length,
         practiced: retries.length,
         earnedXp: progress.xp - xpBefore.current,
-        source: source.label,
+        source: label,
       })
       return
     }
@@ -301,7 +401,7 @@ function Game({ source, progress, roundLength, onProgress, onComplete, onExit, o
         {inRetry ? (
           <p className="retry-banner">
             <span aria-hidden="true">🔁</span>
-            One more look at the words you missed. No pressure — this one does not change your score.
+            One more look at a word you missed — this one does not change your score.
           </p>
         ) : null}
         <div className="question-heading">
@@ -313,11 +413,20 @@ function Game({ source, progress, roundLength, onProgress, onComplete, onExit, o
         <div className="question-area">
           <Question key={index} item={item} onAnswer={answer} feedback={feedback} />
         </div>
+        {feedback ? null : (
+          <button className="unsure-button" type="button" onClick={() => answer(false, UNKNOWN_ANSWER)}>
+            I don&apos;t know this one — show me
+          </button>
+        )}
         {feedback ? (
           <div className={`feedback ${feedback.isCorrect ? 'correct' : 'try-again'}`} role="status">
             <span className="feedback-icon">{feedback.isCorrect ? '✓' : '↗'}</span>
             <div>
-              <b>{feedback.isCorrect ? 'You found it!' : 'Good try — now you know it.'}</b>
+              <b>
+                {feedback.isCorrect ? 'You found it!'
+                  : feedback.choice === UNKNOWN_ANSWER ? 'Good asking — here it is.'
+                  : 'Good try — now you know it.'}
+              </b>
               <p className="answer-line">
                 <span>The word is</span>
                 <strong>{item.word}</strong>
@@ -330,7 +439,6 @@ function Game({ source, progress, roundLength, onProgress, onComplete, onExit, o
           </div>
         ) : null}
       </section>
-      <p className="game-note">No timer here. Take your time{audio ? ' and listen again whenever you want' : ''}.</p>
     </main>
   )
 }
@@ -716,7 +824,7 @@ function Privacy({ onBack }) {
 
         <h2>Questions</h2>
         <p>
-          Email <a href="mailto:wishfulcoders@gmail.com">wishfulcoders@gmail.com</a>. This page will
+          Email <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>. This page will
           be dated and updated if any of the above changes.
         </p>
         <p className="prose-note">Last updated 17 August 2026.</p>
@@ -960,7 +1068,8 @@ export default function App() {
   const audio = useAudioAvailable()
 
   const profile = activeProfile(store)
-  const source = useMemo(() => resolveSource(selection, profile), [selection, profile])
+  const review = useMemo(() => reviewWords(profile.progress, knownWords(profile)), [profile])
+  const source = useMemo(() => resolveSource(selection, profile, review), [selection, profile, review])
 
   useEffect(() => { setSaveFailed(!saveStore(store)) }, [store])
   useEffect(() => { window.scrollTo({ top: 0, behavior: 'instant' }) }, [view])
@@ -1007,6 +1116,7 @@ export default function App() {
           profile={profile}
           selection={selection}
           source={source}
+          review={review}
           onSelect={setSelection}
           onStart={() => setView('game')}
           onShowRewards={() => setView('rewards')}
@@ -1063,14 +1173,21 @@ export default function App() {
         />
       ) : null}
       {levelUps.length ? <LevelUpModal levelUps={levelUps} onClose={() => setLevelUps([])} /> : null}
-      <footer>
-        <span>{saveFailed ? 'Progress cannot be saved in this browser window.' : 'Spell Trail saves progress on this device.'}</span>
-        <button type="button" onClick={() => setView('family')}>Players & word lists</button>
-        <button type="button" onClick={() => setView('privacy')}>Privacy</button>
-        <a className="footer-heart" href={SUPPORT_URL} target="_blank" rel="noopener noreferrer">
-          <span aria-hidden="true">♥</span> Support the developer
-        </a>
-      </footer>
+      {/* The trail screen has to fit a phone without scrolling, so the footer
+          steps out of the way while a round is being played. */}
+      {view === 'game' ? null : (
+        <footer>
+          <a className="studio-line" href={STUDIO_URL} target="_blank" rel="noopener noreferrer">
+            A <b>Wishful Coders</b> app
+          </a>
+          <span>{saveFailed ? 'Progress cannot be saved in this browser window.' : 'Spell Trail saves progress on this device.'}</span>
+          <button type="button" onClick={() => setView('family')}>Players & word lists</button>
+          <button type="button" onClick={() => setView('privacy')}>Privacy</button>
+          <a className="footer-heart" href={SUPPORT_URL} target="_blank" rel="noopener noreferrer">
+            <span aria-hidden="true">♥</span> Support the developer
+          </a>
+        </footer>
+      )}
     </div>
   )
 }

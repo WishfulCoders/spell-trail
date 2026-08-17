@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { blankFor, shuffle } from './game.js'
 
 // Each question component takes the same props:
@@ -120,7 +120,10 @@ export function ChunkQuestion({ item, onAnswer, feedback }) {
   )
 }
 
-export function TypeQuestion({ item, onAnswer, feedback }) {
+// Shared by every mode that asks the player to spell the whole word. The
+// keyboard handling is the reason it is shared: get one attribute wrong and the
+// phone quietly offers the answer above the keys.
+function SpellingInput({ id, label, placeholder, item, onAnswer, feedback }) {
   const [value, setValue] = useState('')
   const disabled = Boolean(feedback)
   const state = feedback ? (feedback.isCorrect ? 'is-correct' : 'is-wrong') : ''
@@ -133,17 +136,24 @@ export function TypeQuestion({ item, onAnswer, feedback }) {
         if (typed) onAnswer(typed.toLowerCase() === item.word, typed.toLowerCase())
       }}
     >
-      <label htmlFor="typed-word">Type what you hear</label>
+      <label htmlFor={id}>{label}</label>
+      {/* A phone keyboard that suggests the word defeats the whole exercise.
+          `autocorrect` is what iOS listens to, and Chrome turns
+          `spellcheck=false` into the Android IME's no-suggestions flag. */}
       <input
-        id="typed-word"
+        id={id}
         className={state}
         autoComplete="off"
+        autoCorrect="off"
         autoCapitalize="none"
         spellCheck="false"
+        enterKeyHint="done"
+        data-1p-ignore=""
+        data-lpignore="true"
         value={value}
         disabled={disabled}
         onChange={(event) => setValue(event.target.value)}
-        placeholder="Type the word…"
+        placeholder={placeholder}
         autoFocus
       />
       <button className="check-button" type="submit" disabled={disabled || !value.trim()}>
@@ -153,11 +163,72 @@ export function TypeQuestion({ item, onAnswer, feedback }) {
   )
 }
 
+export function TypeQuestion({ item, onAnswer, feedback }) {
+  return (
+    <SpellingInput
+      id="typed-word"
+      label="Type what you hear"
+      placeholder="Type the word…"
+      item={item}
+      onAnswer={onAnswer}
+      feedback={feedback}
+    />
+  )
+}
+
+// How long the word stays on screen before it is taken away. Long words get
+// longer — the exercise is holding a spelling in your head for a moment, not
+// reading against a stopwatch.
+export const PEEK_BASE_MS = 1500
+export const PEEK_PER_LETTER_MS = 220
+export const PEEK_MAX_MS = 5000
+
+export function peekMs(word) {
+  return Math.min(PEEK_BASE_MS + word.length * PEEK_PER_LETTER_MS, PEEK_MAX_MS)
+}
+
+export function MemoryQuestion({ item, onAnswer, feedback }) {
+  const hold = useMemo(() => peekMs(item.word), [item])
+  const [showing, setShowing] = useState(true)
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setShowing(false), hold)
+    return () => window.clearTimeout(timer)
+  }, [hold])
+
+  // Answering during the peek — by way of the "I don't know" button — hides the
+  // word too, so the feedback panel below is the one place the answer is shown.
+  if (showing && !feedback) {
+    return (
+      <div className="memory-flash">
+        <p className="memory-word">{item.word}</p>
+        <div className="memory-timer" aria-hidden="true">
+          <i style={{ animationDuration: `${hold}ms` }} />
+        </div>
+        <button className="tiny-button" type="button" onClick={() => setShowing(false)}>
+          Hide it — I&apos;m ready
+        </button>
+      </div>
+    )
+  }
+  return (
+    <SpellingInput
+      id="remembered-word"
+      label="Type the word you just saw"
+      placeholder="Spell it from memory…"
+      item={item}
+      onAnswer={onAnswer}
+      feedback={feedback}
+    />
+  )
+}
+
 // The registry is what a new game mode plugs into. `game.js` decides *which*
 // mode a word gets; this decides how it looks.
 export const MODE_REGISTRY = {
   listen: { component: ListenQuestion, eyebrow: 'Listen & spot', title: 'Which spelling is right?', icon: '🔊' },
   missing: { component: MissingQuestion, eyebrow: 'Fill the gap', title: 'Choose the missing piece', icon: '🧩' },
   chunks: { component: ChunkQuestion, eyebrow: 'Build the word', title: 'Tap the pieces in order', icon: '🪵' },
+  memory: { component: MemoryQuestion, eyebrow: 'Memory trail', title: 'Look, then spell it from memory', icon: '🧠' },
   type: { component: TypeQuestion, eyebrow: 'Typing checkpoint', title: 'Listen, then type the word', icon: '⌨️' },
 }

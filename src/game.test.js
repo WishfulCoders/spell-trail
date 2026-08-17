@@ -3,6 +3,8 @@ import {
   DEFAULT_PROGRESS,
   LEVEL_REQUIREMENT_CAP,
   MAX_LEVEL,
+  RECALL_MODES,
+  REVIEW_CLEAR,
   ROUND_LENGTH,
   XP_CURVE_VERSION,
   awardAnswer,
@@ -20,8 +22,11 @@ import {
   migrateXp,
   newProgress,
   normalizeProgress,
+  needsReview,
+  passedCount,
   planModes,
   resolveMode,
+  reviewWords,
   saveProgress,
   settleLevelUps,
   supportedModes,
@@ -81,6 +86,91 @@ describe('progress', () => {
   })
 })
 
+describe('words passed off', () => {
+  const words = [{ word: 'said' }, { word: 'they' }, { word: 'what' }]
+
+  it('counts nothing on a fresh profile', () => {
+    expect(passedCount(newProgress(), words)).toBe(0)
+  })
+
+  it('counts a word once it has been spelled right', () => {
+    const progress = awardAnswer(newProgress(), 'said', true).progress
+    expect(passedCount(progress, words)).toBe(1)
+  })
+
+  it('does not count a word that has only been missed', () => {
+    const progress = awardAnswer(newProgress(), 'said', false).progress
+    expect(passedCount(progress, words)).toBe(0)
+  })
+
+  it('never takes a passed word back after a later mistake', () => {
+    const right = awardAnswer(newProgress(), 'said', true).progress
+    const thenWrong = awardAnswer(right, 'said', false).progress
+    expect(passedCount(thenWrong, words)).toBe(1)
+  })
+
+  it('ignores words from other trails', () => {
+    const progress = awardAnswer(newProgress(), 'expedition', true).progress
+    expect(passedCount(progress, words)).toBe(0)
+  })
+})
+
+describe('review camp', () => {
+  const words = [{ word: 'said' }, { word: 'they' }, { word: 'what' }]
+  const missed = (progress, word, now) => awardAnswer(progress, word, false, { mode: 'type', now }).progress
+  const right = (progress, word, now) => awardAnswer(progress, word, true, { mode: 'listen', now }).progress
+
+  it('is empty for a player who has missed nothing', () => {
+    expect(reviewWords(newProgress(), words)).toEqual([])
+  })
+
+  it('gathers a word as soon as it is missed', () => {
+    const progress = missed(newProgress(), 'said', 1000)
+    expect(needsReview(progress, 'said')).toBe(true)
+    expect(reviewWords(progress, words).map((entry) => entry.word)).toEqual(['said'])
+  })
+
+  it('keeps a word until it has been spelled right twice', () => {
+    let progress = missed(newProgress(), 'said', 1000)
+    for (let clean = 1; clean < REVIEW_CLEAR; clean += 1) {
+      progress = right(progress, 'said', 1000 + clean)
+      expect(needsReview(progress, 'said'), `cleared after ${clean} right answers`).toBe(true)
+    }
+    expect(needsReview(right(progress, 'said', 9000), 'said')).toBe(false)
+  })
+
+  it('lets a correct retry count towards leaving camp', () => {
+    const first = awardAnswer(newProgress(), 'said', false, { mode: 'type', now: 1000 }).progress
+    const retry = awardAnswer(first, 'said', true, { mode: 'chunks', now: 2000, practice: true }).progress
+    expect(retry.mastered.said.sinceWrong).toBe(1)
+  })
+
+  it('sends a word back to camp when it is missed again', () => {
+    const cleared = right(right(missed(newProgress(), 'said', 1000), 'said', 2000), 'said', 3000)
+    expect(needsReview(cleared, 'said')).toBe(false)
+    expect(needsReview(missed(cleared, 'said', 4000), 'said')).toBe(true)
+  })
+
+  it('puts the neediest word first, then the freshest mistake', () => {
+    let progress = missed(newProgress(), 'said', 1000)
+    progress = missed(progress, 'they', 2000)
+    progress = missed(progress, 'what', 3000)
+    // 'said' has one clean answer behind it, so it needs the least work.
+    progress = right(progress, 'said', 4000)
+    expect(reviewWords(progress, words).map((entry) => entry.word)).toEqual(['what', 'they', 'said'])
+  })
+
+  it('only gathers words from the pool it was given', () => {
+    const progress = missed(newProgress(), 'expedition', 1000)
+    expect(reviewWords(progress, words)).toEqual([])
+  })
+
+  it('ignores a saved profile with no record of when a word was missed', () => {
+    const loaded = normalizeProgress({ mastered: { said: { right: 0, tries: 1 } } })
+    expect(needsReview(loaded, 'said')).toBe(false)
+  })
+})
+
 describe('storage', () => {
   function fakeStorage(value) {
     return { getItem: () => value, setItem: () => {} }
@@ -93,7 +183,7 @@ describe('storage', () => {
   it('backfills fields missing from an older saved profile', () => {
     const saved = JSON.stringify({ xp: 50, mastered: { friend: { right: 1, tries: 2 } } })
     const loaded = loadProgress(fakeStorage(saved))
-    expect(loaded.mastered.friend).toEqual({ right: 1, tries: 2, lastSeen: 0, lastWrong: 0, missedModes: {} })
+    expect(loaded.mastered.friend).toEqual({ right: 1, tries: 2, sinceWrong: 0, lastSeen: 0, lastWrong: 0, missedModes: {} })
     expect(loaded.badges).toEqual([])
   })
 
@@ -104,15 +194,21 @@ describe('storage', () => {
 })
 
 describe('round building', () => {
-  it('keeps two typing checkpoints in an eight-word trail', () => {
+  it('keeps two recall checkpoints in an eight-word trail, one of each kind', () => {
     const round = buildRound({ words: WORD_TIERS[0].words, length: ROUND_LENGTH, random: () => 0.5 })
-    expect(round.filter((item) => item.mode === 'type')).toHaveLength(2)
+    expect(round.filter((item) => item.mode === 'type')).toHaveLength(1)
+    expect(round.filter((item) => item.mode === 'memory')).toHaveLength(1)
   })
 
-  it('still includes a typing checkpoint in a three-word trail', () => {
+  it('still includes a recall checkpoint in a three-word trail', () => {
     const plan = planModes(3, () => 0.5)
     expect(plan).toHaveLength(3)
-    expect(plan.filter((mode) => mode === 'type')).toHaveLength(1)
+    expect(plan.filter((mode) => RECALL_MODES.includes(mode))).toHaveLength(1)
+  })
+
+  it('gives a device with no speech a memory checkpoint instead of a typed one', () => {
+    const round = buildRound({ words: WORD_TIERS[0].words, length: ROUND_LENGTH, random: () => 0.5, audio: false })
+    expect(round.some((item) => item.mode === 'memory')).toBe(true)
   })
 
   it('spreads the non-typing modes evenly at full length', () => {
@@ -128,10 +224,12 @@ describe('round building', () => {
     expect(new Set(round.map((item) => item.word)).size).toBe(3)
   })
 
-  it('falls back to typing when a word carries no chunks or distractors', () => {
+  it('falls back to the recall modes when a word carries no chunks or distractors', () => {
     const bare = { word: 'spelling', sentence: 'Spelling takes practice.' }
-    expect(supportedModes(bare)).toEqual(['type'])
-    expect(resolveMode(bare, 'chunks')).toBe('type')
+    expect(supportedModes(bare)).toEqual(['memory', 'type'])
+    // Neither typing nor memory needs authored data, and memory keeps a trail
+    // built from bare words from turning into nothing but typing.
+    expect(resolveMode(bare, 'chunks')).toBe('memory')
   })
 
   it('drops typing when the device has no speech', () => {
@@ -235,7 +333,8 @@ describe('in-session correction', () => {
   const word = { word: 'friend', sentence: 'My friend saved me a seat.', chunks: ['fri', 'end'], distractors: ['freind', 'frend'], blank: { at: 0, options: ['fre', 'fir'] } }
 
   it('brings a missed word back one step easier', () => {
-    expect(easierMode(word, 'type')).toBe('chunks')
+    expect(easierMode(word, 'type')).toBe('memory')
+    expect(easierMode(word, 'memory')).toBe('chunks')
     expect(easierMode(word, 'chunks')).toBe('missing')
     expect(easierMode(word, 'missing')).toBe('listen')
   })
@@ -246,7 +345,8 @@ describe('in-session correction', () => {
 
   it('skips modes the word cannot support', () => {
     const bare = { word: 'spelling', sentence: 'Spelling takes practice.', distractors: ['speling', 'spellling'] }
-    expect(easierMode(bare, 'type')).toBe('listen')
+    // No chunks, so building and gap-filling are both out of reach.
+    expect(easierMode(bare, 'memory')).toBe('listen')
   })
 
   it('marks the retry and never repeats the original mode', () => {

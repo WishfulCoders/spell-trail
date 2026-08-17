@@ -19,7 +19,7 @@ export const STREAK_BONUS_CAP = 5
 export const STREAK_FIREFLY_BONUS_AT = 3
 export const ROUND_LENGTH = 8
 export const ROUND_LENGTH_OPTIONS = [3, 5, 8, 12, 16]
-export const TYPE_SHARE = 0.25
+export const RECALL_SHARE = 0.25
 
 export function clampRoundLength(value) {
   const wanted = Number(value)
@@ -37,6 +37,10 @@ export function clampRoundLength(value) {
 export const DEFAULT_WORD_STAT = Object.freeze({
   right: 0,
   tries: 0,
+  // Clean answers since the last miss. This is what retires a word from review
+  // camp, and it is why the total `right` count cannot do that job: a word can
+  // be right ten times and still have been missed this morning.
+  sinceWrong: 0,
   lastSeen: 0,
   lastWrong: 0,
   missedModes: {},
@@ -143,6 +147,51 @@ export function migrateXp(oldXp) {
   return totalXpForLevel(oldLevel) + carried
 }
 
+// A word is passed off once it has been spelled right at least once. Later
+// mistakes never take it back: the count is a record of ground covered, not a
+// running score, so a track's progress bar only ever moves forwards.
+export const PASS_THRESHOLD = 1
+
+export function isPassed(progress, word) {
+  return (progress?.mastered?.[word]?.right || 0) >= PASS_THRESHOLD
+}
+
+// `words` is a tier or pack word list — [{ word, ... }].
+export function passedCount(progress, words) {
+  return words.reduce((total, entry) => total + (isPassed(progress, entry.word) ? 1 : 0), 0)
+}
+
+/* ---------------------------------------------------------- review camp -- */
+
+// Clean answers needed to walk a word back out of review camp. One is not
+// enough: a lucky guess on a three-option question should not clear a word the
+// child could not spell yesterday.
+export const REVIEW_CLEAR = 2
+
+export function needsReview(progress, word) {
+  const stat = progress?.mastered?.[word]
+  if (!stat || !stat.lastWrong) return false
+  return (stat.sinceWrong || 0) < REVIEW_CLEAR
+}
+
+// Every word the player has missed and not yet walked back, neediest first:
+// fewest clean answers since the miss, then the most recent mistake. Callers
+// pass the pool to search — the tiers plus whatever their grown-up typed in.
+export function reviewWords(progress, words) {
+  return words
+    .filter((entry) => needsReview(progress, entry.word))
+    .sort((left, right) => {
+      const a = progress.mastered[left.word]
+      const b = progress.mastered[right.word]
+      return (a.sinceWrong || 0) - (b.sinceWrong || 0) || (b.lastWrong || 0) - (a.lastWrong || 0)
+    })
+}
+
+// What a player picks when they have no idea how to spell the word. It is
+// graded as a miss so the word comes back for a second look, but it is never a
+// real answer, so nothing in the UI should try to match it against an option.
+export const UNKNOWN_ANSWER = '__i-dont-know__'
+
 export function shuffle(items, random = Math.random) {
   const result = [...items]
   for (let index = result.length - 1; index > 0; index -= 1) {
@@ -154,7 +203,7 @@ export function shuffle(items, random = Math.random) {
 
 /* ---------------------------------------------------------------- modes -- */
 
-export const MODES = ['listen', 'missing', 'chunks', 'type']
+export const MODES = ['listen', 'missing', 'chunks', 'memory', 'type']
 
 // A mode can only be used for a word that carries the data it needs. Curated
 // tier words carry everything; a parent-entered word may carry nothing but the
@@ -163,6 +212,9 @@ const MODE_REQUIREMENTS = {
   listen: (word) => Array.isArray(word.distractors) && word.distractors.length >= 2,
   missing: (word) => Array.isArray(word.chunks) && word.chunks.length >= 2,
   chunks: (word) => Array.isArray(word.chunks) && word.chunks.length >= 2,
+  // Memory trail shows the word and takes it away again, so it needs nothing
+  // but the word — and, unlike typing, no speech either.
+  memory: () => true,
   type: () => true,
 }
 
@@ -176,13 +228,22 @@ export function supportedModes(word, { audio = true } = {}) {
 export function resolveMode(word, wanted, { audio = true } = {}) {
   const available = supportedModes(word, { audio })
   if (available.includes(wanted)) return wanted
-  // Prefer any non-typing fallback so a round does not turn into all typing.
+  // Step down the difficulty ladder rather than jumping to an arbitrary mode:
+  // a word that cannot be typed should land on the next-hardest thing it can
+  // do, not on the easiest. Below the ladder, prefer any non-typing fallback so
+  // a round does not turn into all typing.
+  const wantedRank = MODE_DIFFICULTY.indexOf(wanted)
+  for (let step = wantedRank - 1; step >= 0; step -= 1) {
+    if (available.includes(MODE_DIFFICULTY[step])) return MODE_DIFFICULTY[step]
+  }
   return available.find((mode) => mode !== 'type') || available[0] || 'type'
 }
 
 // Easiest to hardest: picking from three spellings gives the most support,
-// typing from memory the least.
-export const MODE_DIFFICULTY = ['listen', 'missing', 'chunks', 'type']
+// typing from nothing but the spoken word the least. Memory trail sits just
+// below typing — the word was on screen a moment ago, so there is something to
+// reach for.
+export const MODE_DIFFICULTY = ['listen', 'missing', 'chunks', 'memory', 'type']
 
 export function easierMode(word, mode, { audio = true } = {}) {
   const available = supportedModes(word, { audio })
@@ -199,21 +260,26 @@ export function makeRetry(item, { audio = true } = {}) {
   return { ...item, mode: easierMode(item, item.mode, { audio }), retry: true }
 }
 
-// Typing checkpoints land at evenly spaced positions, ending on the last
+// The two modes that ask a player to produce the whole word from nothing on
+// screen. Checkpoints alternate between them so a trail asks for recall twice
+// in two different ways rather than twice the same way.
+export const RECALL_MODES = ['type', 'memory']
+
+// Recall checkpoints land at evenly spaced positions, ending on the last
 // question. At length 8 that is indices 3 and 7; at length 3 it is index 2.
 export function planModes(length, random = Math.random) {
   if (length <= 0) return []
-  const typeCount = Math.min(length, Math.max(1, Math.round(length * TYPE_SHARE)))
-  const typeSlots = new Set()
-  for (let slot = 1; slot <= typeCount; slot += 1) {
-    typeSlots.add(Math.round((slot * length) / typeCount) - 1)
+  const checkpoints = Math.min(length, Math.max(1, Math.round(length * RECALL_SHARE)))
+  const checkpointAt = new Map()
+  for (let slot = 1; slot <= checkpoints; slot += 1) {
+    checkpointAt.set(Math.round((slot * length) / checkpoints) - 1, RECALL_MODES[(slot - 1) % RECALL_MODES.length])
   }
   const cycle = shuffle(['listen', 'missing', 'chunks'], random)
   const plan = []
   let cursor = 0
   for (let index = 0; index < length; index += 1) {
-    if (typeSlots.has(index)) {
-      plan.push('type')
+    if (checkpointAt.has(index)) {
+      plan.push(checkpointAt.get(index))
       continue
     }
     plan.push(cycle[cursor % cycle.length])
@@ -299,6 +365,9 @@ export function awardAnswer(progress, word, isCorrect, { mode = null, now = Date
   const stat = {
     right: (previous?.right || 0) + (isCorrect ? 1 : 0),
     tries: (previous?.tries || 0) + 1,
+    // A retry counts here. Getting it right on the second look is exactly the
+    // progress review camp is watching for.
+    sinceWrong: isCorrect ? (previous?.sinceWrong || 0) + 1 : 0,
     lastSeen: now,
     lastWrong: isCorrect ? previous?.lastWrong || 0 : now,
     missedModes,

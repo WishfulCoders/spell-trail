@@ -16,10 +16,11 @@ checkpoints spaced evenly through each trail.
 | Storage | `BACKUPS` KV (`7b15846d1e874de0b8a787d2d2cb5139`) — optional backups only |
 | Repo | `github.com:jlaw9/spell-trail`, committed directly to `main` |
 
-Shipped: six tiers of 64 words, four question modes, in-session correction, up to six
-player profiles, parent-entered word lists, firefly-bought companions, backup codes,
-per-player session length, voice selection, a levelling curve with a level-up
-celebration, and a privacy page.
+Shipped: six tiers of 64 words, five question modes, review camp, in-session
+correction, an "I don't know" escape on every question, per-trail passed-off counts,
+up to six player profiles, parent-entered word lists, firefly-bought companions,
+backup codes, per-player session length, voice selection, a levelling curve with a
+level-up celebration, and a privacy page.
 
 Known gaps, in the order worth fixing:
 
@@ -29,8 +30,9 @@ Known gaps, in the order worth fixing:
 - **The backup API has no rate limiting.** Codes have roughly 10^11 combinations so
   brute force is impractical, but a Cloudflare rate-limiting rule on `/api/backup/*`
   would close it properly.
-- **Review Camp is unbuilt.** `awardAnswer` already records `lastSeen`, `lastWrong`, and
-  `missedModes` per word, and nothing consumes them yet — that is the intended input.
+- **`missedModes` is recorded but unused.** `awardAnswer` counts which mode each word
+  was missed in. Review camp does not read it yet; weighting a review question towards
+  the mode a word keeps failing in is the obvious next use.
 
 ## Run it
 
@@ -47,19 +49,36 @@ leaves the device is an optional backup the grown-up asks for — see **Backup**
 `src/game.js` owns the round. Three inputs are independent, so a new game mode only
 has to supply one of them:
 
-- **Words** — `buildRound({ words })` takes any list: a tier, a custom pack, or a
-  future review queue.
+- **Words** — `buildRound({ words })` takes any list: a tier, a custom pack, or the
+  review queue.
 - **Length** — `length` clamps to the pool, so a five-word pack makes a five-word trail.
-- **Modes** — `planModes(length)` spaces typing checkpoints evenly and rotates the
-  other modes. At length 8 that is two typing questions; at length 3 it is one.
+- **Modes** — `planModes(length)` spaces *recall checkpoints* evenly and rotates the
+  three supported modes between them. A checkpoint alternates between typing what you
+  hear and memory trail, so a trail asks for the whole word twice in two different
+  ways. At length 8 that is one of each, at indices 3 and 7; at length 3 it is one.
 
 Each mode declares what a word must carry (`MODE_REQUIREMENTS`). A word with no
-syllable chunks cannot be a build-the-word question, so `resolveMode` falls back
-rather than rendering something unanswerable. The same guard covers devices with no
-speech voices, where typing questions are swapped out and written clues shown instead.
+syllable chunks cannot be a build-the-word question, so `resolveMode` steps down
+`MODE_DIFFICULTY` rather than rendering something unanswerable. The same guard covers
+devices with no speech voices: typing questions become memory-trail questions, which
+need no audio, and written clues are shown instead.
 
 `src/modes.jsx` holds the per-mode React components and the registry that maps a mode
-name to its component and copy.
+name to its component and copy. Memory trail shows the word for `peekMs(word)` — longer
+words get longer, capped at five seconds — then hides it and asks for it typed.
+
+## Review camp
+
+A word joins review camp the moment it is missed and leaves after `REVIEW_CLEAR` (2)
+clean answers, tracked per word as `sinceWrong`. The total `right` count cannot do that
+job: a word can be right ten times and still have been missed this morning. A correct
+second look inside a trail counts towards leaving, which is the whole point of it.
+
+`reviewWords(progress, pool)` returns the missed words neediest-first — fewest clean
+answers since the miss, then the freshest mistake. `App.jsx` passes it every word the
+player could have met (the six tiers plus their own lists) and shows the track on the
+trail map only when it holds something. A review trail takes the words at the *front*
+of that list rather than sampling it, so the neediest words come up first.
 
 ## Correction
 
@@ -184,6 +203,13 @@ npm run build
 The heart in the footer and the card in the grown-ups area both point at `SUPPORT_URL`, a single
 exported constant at the top of `src/App.jsx`. Change it there and both follow.
 
+## The studio line
+
+The footer carries **A Wishful Coders app**, linking to `STUDIO_URL`
+(`https://wishfulcoders.com`) — the same wording and link every Wishful Coders app should
+use, so the studio reads the same wherever someone meets it. Markup is
+`<a class="studio-line">A <b>Wishful Coders</b> app</a>`.
+
 ## Deploy
 
 The Worker serves the API and the static build together. It lives on the
@@ -199,3 +225,26 @@ To run the API locally (the plain `npm run dev` Vite server has no Worker, so ba
 ```bash
 npx wrangler dev
 ```
+
+## Email
+
+`support@spelltrail.app` forwards to `wishfulcoders@gmail.com` through Cloudflare Email
+Routing, so the address a family sees on the privacy page is the app's own rather than a
+personal mailbox. It is exported as `SUPPORT_EMAIL` at the top of `src/App.jsx` — change
+it there and add a matching routing rule. Nothing in the app sends or receives mail:
+this is DNS and a routing rule, not code, and the Worker has no `email()` handler.
+
+```bash
+npx wrangler email routing settings spelltrail.app   # enabled / status
+npx wrangler email routing rules list spelltrail.app # who forwards where
+```
+
+The zone previously used Namecheap's forwarders. Cloudflare refuses to enable while
+foreign MX records are present, so those (`eforward1-5.registrar-servers.com`) and their
+SPF TXT were deleted first; enabling then published Cloudflare's own MX, SPF, and DKIM
+records. The catch-all is **disabled and set to drop**, so only `support@` is delivered
+and mail to any other address at the domain bounces — turn the catch-all on if that is
+ever not what you want.
+
+Note the wrangler OAuth token can manage routing (`email_routing:write`) but holds no
+DNS record scope, so DNS edits still need the dashboard or a `Zone → DNS → Edit` token.

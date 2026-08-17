@@ -64,7 +64,7 @@ describe('syllabify', () => {
 describe('buildWordEntry', () => {
   it('produces an entry every game mode can use', () => {
     const entry = buildWordEntry('rocket')
-    expect(supportedModes(entry).sort()).toEqual(['chunks', 'listen', 'missing', 'type'])
+    expect(supportedModes(entry).sort()).toEqual(['chunks', 'listen', 'memory', 'missing', 'type'])
   })
 
   it('gives three distinct blank options including the answer', () => {
