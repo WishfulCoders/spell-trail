@@ -1,25 +1,80 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { BADGES, DEFAULT_PROGRESS, STORAGE_KEY, awardAnswer, finishSession, levelFromXp, levelProgress, loadProgress, makeRound, shuffle } from './game.js'
-import { WORD_TIERS } from './words.js'
+import {
+  BADGES,
+  ROUND_LENGTH,
+  SESSION_BONUS,
+  awardAnswer,
+  blankSentence,
+  buildRound,
+  finishSession,
+  levelFromXp,
+  levelProgress,
+  makeRetry,
+  newProgress,
+  xpIntoLevel,
+  xpToNextLevel,
+} from './game.js'
+import { MODE_REGISTRY } from './modes.jsx'
+import {
+  MAX_NAME_LENGTH,
+  MAX_PROFILES,
+  activeProfile,
+  addProfile,
+  cleanName,
+  createPack,
+  loadStore,
+  removeProfile,
+  saveStore,
+  updateProfile,
+} from './profiles.js'
+import { onVoicesChanged, speak, speechReady, stopSpeaking } from './speech.js'
+import { MAX_PACK_WORDS, buildPackWords, parseEntries } from './wordgen.js'
+import { DEFAULT_TIER_ID, WORD_TIERS } from './words.js'
 
-const MODE_COPY = {
-  listen: { eyebrow: 'Listen & spot', title: 'Which spelling is right?', icon: '🔊' },
-  missing: { eyebrow: 'Fill the gap', title: 'Choose the missing piece', icon: '🧩' },
-  chunks: { eyebrow: 'Build the word', title: 'Tap the pieces in order', icon: '🪵' },
-  type: { eyebrow: 'Typing checkpoint', title: 'Listen, then type the word', icon: '⌨️' },
+// Chrome fires `voiceschanged` once, often before React has mounted and
+// subscribed — so the event alone leaves the app believing it has no speech.
+// Poll briefly as well, then give up and fall back to written clues.
+const VOICE_POLL_MS = 250
+const VOICE_GIVE_UP_MS = 4000
+
+function useAudioAvailable() {
+  const [available, setAvailable] = useState(() => speechReady())
+  useEffect(() => {
+    if (available) return undefined
+    let stopped = false
+    const check = () => {
+      if (stopped || !speechReady()) return
+      stopped = true
+      setAvailable(true)
+    }
+    const unsubscribe = onVoicesChanged(check)
+    const interval = window.setInterval(check, VOICE_POLL_MS)
+    const giveUp = window.setTimeout(() => window.clearInterval(interval), VOICE_GIVE_UP_MS)
+    check()
+    return () => {
+      stopped = true
+      unsubscribe()
+      window.clearInterval(interval)
+      window.clearTimeout(giveUp)
+    }
+  }, [available])
+  return available
 }
 
-function speak(text, rate = 0.82) {
-  if (!('speechSynthesis' in window)) return
-  window.speechSynthesis.cancel()
-  const utterance = new SpeechSynthesisUtterance(text)
-  utterance.rate = rate
-  utterance.pitch = 1
-  window.speechSynthesis.speak(utterance)
+// A trail can be drawn from a built-in tier or from a pack the grown-up typed
+// in. Everything downstream only needs { label, color, words }.
+function resolveSource(selection, profile) {
+  if (selection?.kind === 'pack') {
+    const pack = profile.packs.find((entry) => entry.id === selection.id)
+    if (pack) return { kind: 'pack', id: pack.id, label: pack.name, color: profile.color, icon: '📝', words: pack.words }
+  }
+  const tier = WORD_TIERS.find((entry) => entry.id === selection?.id)
+    || WORD_TIERS.find((entry) => entry.id === DEFAULT_TIER_ID)
+  return { kind: 'tier', id: tier.id, label: tier.label, color: tier.color, icon: tier.icon, words: tier.words }
 }
 
-function Header({ progress, onHome, view }) {
-  const level = levelFromXp(progress.xp)
+function Header({ profile, onHome, onSwitch, view }) {
+  const level = levelFromXp(profile.progress.xp)
   return (
     <header className="topbar">
       <button className="brand" type="button" onClick={onHome} aria-label="Go to trail map">
@@ -27,26 +82,36 @@ function Header({ progress, onHome, view }) {
         <span><strong>Spell Trail</strong><small>Words become adventures</small></span>
       </button>
       <div className="stats" aria-label="Player progress">
-        <div className="stat-chip"><span aria-hidden="true">✨</span><span><b>{progress.fireflies}</b><small>fireflies</small></span></div>
-        <div className="stat-chip"><span aria-hidden="true">🔥</span><span><b>{progress.streak}</b><small>streak</small></span></div>
-        <div className="level-chip"><span>LVL {level}</span><div className="mini-progress"><i style={{ width: `${levelProgress(progress.xp) * 100}%` }} /></div></div>
+        <button className="who-chip" type="button" onClick={onSwitch} style={{ '--tier-color': profile.color }}>
+          <span aria-hidden="true">{profile.avatar}</span>
+          <span><b>{profile.name}</b><small>switch player</small></span>
+        </button>
+        <div className="stat-chip"><span aria-hidden="true">✨</span><span><b>{profile.progress.fireflies}</b><small>fireflies</small></span></div>
+        <div className="stat-chip"><span aria-hidden="true">🔥</span><span><b>{profile.progress.streak}</b><small>streak</small></span></div>
+        <div className="level-chip"><span>LVL {level}</span><div className="mini-progress"><i style={{ width: `${levelProgress(profile.progress.xp) * 100}%` }} /></div></div>
       </div>
       {view !== 'home' ? <button className="quiet-button desktop-only" type="button" onClick={onHome}>Exit trail</button> : null}
     </header>
   )
 }
 
-function Home({ progress, selectedTier, onTierChange, onStart, onShowRewards }) {
+function Home({ profile, selection, source, onSelect, onStart, onShowRewards, onShowFamily }) {
+  const { progress } = profile
   const level = levelFromXp(progress.xp)
   const accuracy = progress.wordsPracticed ? Math.round((progress.correctAnswers / progress.wordsPracticed) * 100) : 0
+  const roundLength = Math.min(ROUND_LENGTH, source.words.length)
   return (
     <main className="home-shell">
       <section className="welcome-card">
         <div className="welcome-copy">
-          <span className="soft-label">TODAY'S ADVENTURE</span>
+          <span className="soft-label">{profile.name.toUpperCase()}'S ADVENTURE</span>
           <h1>Ready for a quick<br /><em>word quest?</em></h1>
-          <p>Eight small challenges. No timer. You can hear every word as many times as you need.</p>
-          <button className="primary-button" type="button" onClick={onStart}><span>Start this trail</span><b>8 words · about 5 min</b><i aria-hidden="true">→</i></button>
+          <p>{roundLength} small challenges. No timer. You can hear every word as many times as you need.</p>
+          <button className="primary-button" type="button" onClick={onStart}>
+            <span>Start {source.label}</span>
+            <b>{roundLength} words · about 5 min</b>
+            <i aria-hidden="true">→</i>
+          </button>
         </div>
         <div className="hero-art" aria-hidden="true">
           <div className="sun" />
@@ -58,15 +123,40 @@ function Home({ progress, selectedTier, onTierChange, onStart, onShowRewards }) 
         </div>
       </section>
 
+      {profile.packs.length ? (
+        <section className="tier-section" aria-labelledby="this-week">
+          <div className="section-heading">
+            <div><span className="soft-label">FROM YOUR GROWN-UP</span><h2 id="this-week">This week's words</h2></div>
+            <p>Spelling lists typed in for you.</p>
+          </div>
+          <div className="tier-grid">
+            {profile.packs.map((pack) => {
+              const selected = selection.kind === 'pack' && selection.id === pack.id
+              return (
+                <button className={`tier-card pack-card ${selected ? 'selected' : ''}`} style={{ '--tier-color': profile.color }} type="button" key={pack.id} onClick={() => onSelect({ kind: 'pack', id: pack.id })} aria-pressed={selected}>
+                  <span className="tier-icon" aria-hidden="true">📝</span>
+                  <strong>{pack.name}</strong><b>{pack.words.length} words</b>
+                  <small>{pack.words.slice(0, 4).map((entry) => entry.word).join(', ')}{pack.words.length > 4 ? '…' : ''}</small>
+                  <span className="tier-state">{selected ? '✓ Ready to play' : 'Practice this list'}</span>
+                </button>
+              )
+            })}
+          </div>
+        </section>
+      ) : null}
+
       <section className="tier-section" aria-labelledby="choose-level">
-        <div className="section-heading"><div><span className="soft-label">CHOOSE YOUR PATH</span><h2 id="choose-level">Pick a practice level</h2></div><p>Start where words feel doable. You can switch anytime.</p></div>
+        <div className="section-heading">
+          <div><span className="soft-label">CHOOSE YOUR PATH</span><h2 id="choose-level">Pick a practice level</h2></div>
+          <p>Start where words feel doable. You can switch anytime.</p>
+        </div>
         <div className="tier-grid">
           {WORD_TIERS.map((tier, index) => {
-            const selected = selectedTier.id === tier.id
+            const selected = selection.kind === 'tier' && selection.id === tier.id
             return (
-              <button className={`tier-card ${selected ? 'selected' : ''}`} style={{ '--tier-color': tier.color }} type="button" key={tier.id} onClick={() => onTierChange(tier)} aria-pressed={selected}>
-                <span className="tier-number">0{index + 1}</span>
-                <span className="tier-icon" aria-hidden="true">{['🌲', '🛶', '⛰️', '🏔️'][index]}</span>
+              <button className={`tier-card ${selected ? 'selected' : ''}`} style={{ '--tier-color': tier.color }} type="button" key={tier.id} onClick={() => onSelect({ kind: 'tier', id: tier.id })} aria-pressed={selected}>
+                <span className="tier-number">{String(index + 1).padStart(2, '0')}</span>
+                <span className="tier-icon" aria-hidden="true">{tier.icon}</span>
                 <strong>{tier.label}</strong><b>{tier.grades}</b><small>{tier.description}</small>
                 <span className="tier-state">{selected ? '✓ Ready to play' : 'Choose this path'}</span>
               </button>
@@ -79,7 +169,7 @@ function Home({ progress, selectedTier, onTierChange, onStart, onShowRewards }) 
         <div className="progress-card">
           <div className="card-title-row"><div><span className="soft-label">YOUR PROGRESS</span><h2>Level {level} Pathfinder</h2></div><span className="round-icon">🧭</span></div>
           <div className="big-progress"><i style={{ width: `${levelProgress(progress.xp) * 100}%` }} /></div>
-          <div className="progress-labels"><span>{progress.xp % 120} XP</span><span>{120 - (progress.xp % 120)} XP to Level {level + 1}</span></div>
+          <div className="progress-labels"><span>{xpIntoLevel(progress.xp)} XP</span><span>{xpToNextLevel(progress.xp)} XP to Level {level + 1}</span></div>
           <div className="mini-metrics"><div><b>{progress.wordsPracticed}</b><span>words practiced</span></div><div><b>{accuracy}%</b><span>accuracy</span></div><div><b>{progress.bestStreak}</b><span>best streak</span></div></div>
         </div>
         <button className="reward-card" type="button" onClick={onShowRewards}>
@@ -88,120 +178,432 @@ function Home({ progress, selectedTier, onTierChange, onStart, onShowRewards }) 
           <span className="reward-link">Open field guide <i>→</i></span>
         </button>
       </section>
+
+      <button className="family-link" type="button" onClick={onShowFamily}>
+        <span aria-hidden="true">👋</span>
+        <span><b>Grown-ups: players & word lists</b><small>Add a player, or type in this week's spelling words</small></span>
+        <i aria-hidden="true">→</i>
+      </button>
     </main>
   )
 }
 
-function ListenButton({ word, sentence, compact = false }) {
+function ListenButton({ word, sentence, audio }) {
+  if (!audio) {
+    return (
+      <p className="audio-notice">
+        <span aria-hidden="true">🔇</span>
+        This browser has no speech voices available, so the trail is showing written clues instead.
+      </p>
+    )
+  }
   return (
-    <button className={`listen-button ${compact ? 'compact' : ''}`} type="button" onClick={() => speak(`${word}. ${sentence}`)}>
+    <button className="listen-button" type="button" onClick={() => speak(`${word}. ${sentence}`)}>
       <span className="sound-waves" aria-hidden="true"><i /><i /><i /><i /></span>
       <span><b>Hear the word</b><small>Tap as many times as you need</small></span>
     </button>
   )
 }
 
-function ListenQuestion({ item, onAnswer, disabled }) {
-  const options = useMemo(() => shuffle([item.word, ...item.distractors]), [item])
-  return <div className="answer-grid">{options.map((option) => <button disabled={disabled} className="word-option" type="button" key={option} onClick={() => onAnswer(option === item.word)}>{option}</button>)}</div>
-}
-
-function MissingQuestion({ item, onAnswer, disabled }) {
-  const targetIndex = Math.max(0, item.chunks.length - 2)
-  const target = item.chunks[targetIndex]
-  const visible = item.chunks.map((chunk, index) => index === targetIndex ? '___' : chunk).join('')
-  const decoys = target.length === 1 ? ['e', 'i'] : [target.split('').reverse().join(''), `${target[0]}${target}`.slice(0, target.length)]
-  const options = useMemo(() => shuffle([...new Set([target, ...decoys])]).slice(0, 3), [target])
-  return <><div className="missing-word" aria-label={`Word with a missing part: ${visible}`}>{item.chunks.map((chunk, index) => <span className={index === targetIndex ? 'blank' : ''} key={`${chunk}-${index}`}>{index === targetIndex ? '?' : chunk}</span>)}</div><div className="small-answer-grid">{options.map((option) => <button disabled={disabled} className="chunk-option" type="button" key={option} onClick={() => onAnswer(option === target)}>{option}</button>)}</div></>
-}
-
-function ChunkQuestion({ item, onAnswer, disabled }) {
-  const choices = useMemo(() => shuffle(item.chunks.map((text, index) => ({ text, index }))), [item])
-  const [picked, setPicked] = useState([])
-  const built = picked.map((index) => item.chunks[index]).join('')
-  function pick(index) { if (!disabled && !picked.includes(index)) setPicked((current) => [...current, index]) }
-  function undo() { if (!disabled) setPicked((current) => current.slice(0, -1)) }
-  return <><div className={`build-line ${built ? '' : 'empty'}`}>{built || 'Your word will appear here'}{picked.length ? <button type="button" onClick={undo} aria-label="Undo last piece">↶</button> : null}</div><div className="small-answer-grid">{choices.map((choice) => <button disabled={disabled || picked.includes(choice.index)} className="chunk-option" type="button" key={choice.index} onClick={() => pick(choice.index)}>{choice.text}</button>)}</div><button disabled={disabled || picked.length !== item.chunks.length} className="check-button" type="button" onClick={() => onAnswer(built === item.word)}>Check my word</button></>
-}
-
-function TypeQuestion({ item, onAnswer, disabled }) {
-  const [value, setValue] = useState('')
-  return <form className="type-form" onSubmit={(event) => { event.preventDefault(); if (value.trim()) onAnswer(value.trim().toLowerCase() === item.word) }}><label htmlFor="typed-word">Type what you hear</label><input id="typed-word" autoComplete="off" autoCapitalize="none" spellCheck="false" value={value} disabled={disabled} onChange={(event) => setValue(event.target.value)} placeholder="Type the word…" autoFocus /><button className="check-button" disabled={disabled || !value.trim()} type="submit">Check my spelling</button></form>
-}
-
-function Game({ tier, progress, onProgress, onComplete, onExit }) {
-  const [round] = useState(() => makeRound(tier))
+function Game({ source, progress, onProgress, onComplete, onExit, audio }) {
+  const [base] = useState(() => buildRound({ words: source.words, length: ROUND_LENGTH, audio }))
+  const [retries, setRetries] = useState([])
   const [index, setIndex] = useState(0)
   const [feedback, setFeedback] = useState(null)
-  const item = round[index]
   const xpBefore = useRef(progress.xp)
+  const missed = useRef(new Set())
 
-  useEffect(() => { const timer = window.setTimeout(() => speak(`${item.word}. ${item.sentence}`), 350); return () => window.clearTimeout(timer) }, [item])
+  const items = useMemo(() => [...base, ...retries], [base, retries])
+  const item = items[index]
+  const inRetry = index >= base.length
+  const isLast = index === items.length - 1
 
-  function answer(isCorrect) {
+  useEffect(() => {
+    if (!audio) return undefined
+    const timer = window.setTimeout(() => speak(`${item.word}. ${item.sentence}`), 350)
+    return () => {
+      window.clearTimeout(timer)
+      stopSpeaking()
+    }
+  }, [item, audio])
+
+  function answer(isCorrect, choice) {
     if (feedback) return
-    const next = awardAnswer(progress, item.word, isCorrect)
+    const { progress: next, xpEarned } = awardAnswer(progress, item.word, isCorrect, {
+      mode: item.mode,
+      practice: Boolean(item.retry),
+    })
     onProgress(next)
-    setFeedback({ isCorrect, xp: isCorrect ? 12 + Math.min(next.streak, 5) : 4 })
-    if (isCorrect) speak('Nice work!', 0.9)
+
+    // Queue a missed word for one second look later in the trail. Once only —
+    // a word the child is stuck on should not trap them in a loop.
+    const queued = !isCorrect && !item.retry && !missed.current.has(item.word)
+    if (queued) {
+      missed.current.add(item.word)
+      setRetries((current) => [...current, makeRetry(item, { audio })])
+    }
+
+    setFeedback({ isCorrect, choice, xp: xpEarned, queued })
+    if (isCorrect && audio) speak('Nice work!', 0.9)
   }
 
   function next() {
-    if (index === round.length - 1) {
-      onComplete({ score: round.length, earnedXp: progress.xp - xpBefore.current, tier })
+    if (isLast) {
+      onComplete({
+        score: base.length,
+        practiced: retries.length,
+        earnedXp: progress.xp - xpBefore.current,
+        source: source.label,
+      })
       return
     }
     setIndex((current) => current + 1)
     setFeedback(null)
   }
 
-  const mode = MODE_COPY[item.mode]
+  const mode = MODE_REGISTRY[item.mode]
+  const Question = mode.component
+  const step = inRetry ? index - base.length + 1 : index + 1
+  const total = inRetry ? retries.length : base.length
+  const filled = (step - 1 + (feedback ? 1 : 0)) / total
   return (
     <main className="game-shell">
-      <div className="game-topline"><button className="back-button" type="button" onClick={onExit}>← <span>Trail map</span></button><div className="question-progress"><div><i style={{ width: `${((index + (feedback ? 1 : 0)) / round.length) * 100}%` }} /></div><span>{index + 1} of {round.length}</span></div><div className="game-streak">🔥 {progress.streak}</div></div>
-      <section className="question-card">
-        <div className="question-heading"><span className="mode-icon" aria-hidden="true">{mode.icon}</span><div><span className="soft-label">{mode.eyebrow}</span><h1>{mode.title}</h1></div></div>
-        <ListenButton word={item.word} sentence={item.sentence} />
-        <p className="sentence"><span>“</span>{item.sentence.replace(new RegExp(item.word, 'i'), '_____')}<span>”</span></p>
-        <div className="question-area">
-          {item.mode === 'listen' ? <ListenQuestion item={item} onAnswer={answer} disabled={Boolean(feedback)} /> : null}
-          {item.mode === 'missing' ? <MissingQuestion item={item} onAnswer={answer} disabled={Boolean(feedback)} /> : null}
-          {item.mode === 'chunks' ? <ChunkQuestion key={index} item={item} onAnswer={answer} disabled={Boolean(feedback)} /> : null}
-          {item.mode === 'type' ? <TypeQuestion key={index} item={item} onAnswer={answer} disabled={Boolean(feedback)} /> : null}
+      <div className="game-topline">
+        <button className="back-button" type="button" onClick={onExit}>← <span>Trail map</span></button>
+        <div className="question-progress">
+          <div className={inRetry ? 'practice' : ''}><i style={{ width: `${filled * 100}%` }} /></div>
+          <span>{inRetry ? `Second look ${step} of ${total}` : `${step} of ${total}`}</span>
         </div>
-        {feedback ? <div className={`feedback ${feedback.isCorrect ? 'correct' : 'try-again'}`} role="status"><span className="feedback-icon">{feedback.isCorrect ? '✓' : '↗'}</span><div><b>{feedback.isCorrect ? 'You found it!' : 'Good try — now you know it.'}</b><p>The word is <strong>{item.word}</strong>. <button type="button" onClick={() => speak(item.word)}>Hear it again</button></p></div><div className="xp-pop">+{feedback.xp} XP</div><button className="next-button" type="button" onClick={next}>{index === round.length - 1 ? 'Finish trail' : 'Next word'} →</button></div> : null}
+        <div className="game-streak">🔥 {progress.streak}</div>
+      </div>
+      <section className="question-card">
+        {inRetry ? (
+          <p className="retry-banner">
+            <span aria-hidden="true">🔁</span>
+            One more look at the words you missed. No pressure — this one does not change your score.
+          </p>
+        ) : null}
+        <div className="question-heading">
+          <span className="mode-icon" aria-hidden="true">{mode.icon}</span>
+          <div><span className="soft-label">{mode.eyebrow}</span><h1>{mode.title}</h1></div>
+        </div>
+        <ListenButton word={item.word} sentence={item.sentence} audio={audio} />
+        <p className="sentence"><span>“</span>{blankSentence(item.sentence, item.word)}<span>”</span></p>
+        <div className="question-area">
+          <Question key={index} item={item} onAnswer={answer} feedback={feedback} />
+        </div>
+        {feedback ? (
+          <div className={`feedback ${feedback.isCorrect ? 'correct' : 'try-again'}`} role="status">
+            <span className="feedback-icon">{feedback.isCorrect ? '✓' : '↗'}</span>
+            <div>
+              <b>{feedback.isCorrect ? 'You found it!' : 'Good try — now you know it.'}</b>
+              <p className="answer-line">
+                <span>The word is</span>
+                <strong>{item.word}</strong>
+                {audio ? <button type="button" onClick={() => speak(item.word)}>Hear it again</button> : null}
+              </p>
+              {feedback.queued ? <small className="queued-note">We will come back to this one before the trail ends.</small> : null}
+            </div>
+            {feedback.xp ? <div className="xp-pop">+{feedback.xp} XP</div> : null}
+            <button className="next-button" type="button" onClick={next}>{isLast ? 'Finish trail' : 'Next word'} →</button>
+          </div>
+        ) : null}
       </section>
-      <p className="game-note">No timer here. Take your time and listen again whenever you want.</p>
+      <p className="game-note">No timer here. Take your time{audio ? ' and listen again whenever you want' : ''}.</p>
     </main>
   )
 }
 
 function Complete({ summary, progress, newBadges, onHome, onReplay }) {
-  return <main className="complete-shell"><section className="complete-card"><div className="celebration" aria-hidden="true"><span>✦</span><span>✧</span><div>🏕️</div><span>✧</span><span>✦</span></div><span className="soft-label">TRAIL COMPLETE</span><h1>You made it to camp!</h1><p>Eight words explored, and every try made your spelling trail stronger.</p><div className="complete-stats"><div><span>⚡</span><b>+{summary.earnedXp + 30}</b><small>XP earned</small></div><div><span>✨</span><b>{progress.fireflies}</b><small>fireflies total</small></div><div><span>🔥</span><b>{progress.bestStreak}</b><small>best streak</small></div></div>{newBadges.length ? <div className="new-badge"><span>{newBadges[0].icon}</span><div><small>NEW BADGE</small><b>{newBadges[0].label}</b><p>{newBadges[0].detail}</p></div></div> : null}<div className="complete-actions"><button className="primary-button" type="button" onClick={onHome}><span>Back to trail map</span><i>→</i></button><button className="quiet-button" type="button" onClick={onReplay}>Practice this level again</button></div></section></main>
+  return (
+    <main className="complete-shell">
+      <section className="complete-card">
+        <div className="celebration" aria-hidden="true"><span>✦</span><span>✧</span><div>🏕️</div><span>✧</span><span>✦</span></div>
+        <span className="soft-label">TRAIL COMPLETE</span>
+        <h1>You made it to camp!</h1>
+        <p>
+          {summary.score} words explored on {summary.source}
+          {summary.practiced ? `, plus ${summary.practiced} second look${summary.practiced === 1 ? '' : 's'}` : ''}
+          , and every try made your spelling trail stronger.
+        </p>
+        <div className="complete-stats">
+          <div><span>⚡</span><b>+{summary.earnedXp + SESSION_BONUS}</b><small>XP earned</small></div>
+          <div><span>✨</span><b>{progress.fireflies}</b><small>fireflies total</small></div>
+          <div><span>🔥</span><b>{progress.bestStreak}</b><small>best streak</small></div>
+        </div>
+        {newBadges.length ? (
+          <div className="new-badge">
+            <span>{newBadges[0].icon}</span>
+            <div><small>NEW BADGE</small><b>{newBadges[0].label}</b><p>{newBadges[0].detail}</p></div>
+          </div>
+        ) : null}
+        <div className="complete-actions">
+          <button className="primary-button" type="button" onClick={onHome}><span>Back to trail map</span><i>→</i></button>
+          <button className="quiet-button" type="button" onClick={onReplay}>Practice this level again</button>
+        </div>
+      </section>
+    </main>
+  )
 }
 
 function Rewards({ progress, onBack }) {
-  return <main className="rewards-shell"><button className="back-button" type="button" onClick={onBack}>← Trail map</button><div className="rewards-heading"><span className="soft-label">FIELD GUIDE</span><h1>Your discoveries</h1><p>Badges celebrate steady practice—not perfect scores.</p></div><div className="badge-grid">{BADGES.map((badge) => { const unlocked = progress.badges.includes(badge.id); return <article className={`badge-card ${unlocked ? '' : 'locked'}`} key={badge.id}><div className="big-badge">{unlocked ? badge.icon : '◇'}</div><span>{unlocked ? 'DISCOVERED' : 'STILL HIDING'}</span><h2>{badge.label}</h2><p>{badge.detail}</p></article> })}</div><section className="firefly-bank"><div><span className="soft-label light">FIREFLY JAR</span><h2>{progress.fireflies} fireflies collected</h2><p>Each correct answer adds light to your jar. A three-answer streak earns an extra firefly.</p></div><div className="jar" aria-label={`${progress.fireflies} fireflies`}><i>✦</i><i>✦</i><i>✦</i><i>✦</i><i>✦</i></div></section></main>
+  return (
+    <main className="rewards-shell">
+      <button className="back-button" type="button" onClick={onBack}>← Trail map</button>
+      <div className="rewards-heading"><span className="soft-label">FIELD GUIDE</span><h1>Your discoveries</h1><p>Badges celebrate steady practice—not perfect scores.</p></div>
+      <div className="badge-grid">
+        {BADGES.map((badge) => {
+          const unlocked = progress.badges.includes(badge.id)
+          return (
+            <article className={`badge-card ${unlocked ? '' : 'locked'}`} key={badge.id}>
+              <div className="big-badge">{unlocked ? badge.icon : '◇'}</div>
+              <span>{unlocked ? 'DISCOVERED' : 'STILL HIDING'}</span>
+              <h2>{badge.label}</h2>
+              <p>{badge.detail}</p>
+            </article>
+          )
+        })}
+      </div>
+      <section className="firefly-bank">
+        <div>
+          <span className="soft-label light">FIREFLY JAR</span>
+          <h2>{progress.fireflies} fireflies collected</h2>
+          <p>Each correct answer adds light to your jar. A three-answer streak earns an extra firefly.</p>
+        </div>
+        <div className="jar" aria-label={`${progress.fireflies} fireflies`}><i>✦</i><i>✦</i><i>✦</i><i>✦</i><i>✦</i></div>
+      </section>
+    </main>
+  )
+}
+
+function ConfirmButton({ className = 'quiet-button', label, confirmLabel, onConfirm }) {
+  const [armed, setArmed] = useState(false)
+  useEffect(() => {
+    if (!armed) return undefined
+    const timer = window.setTimeout(() => setArmed(false), 5000)
+    return () => window.clearTimeout(timer)
+  }, [armed])
+  if (!armed) return <button className={className} type="button" onClick={() => setArmed(true)}>{label}</button>
+  return (
+    <button className={`${className} danger`} type="button" onClick={() => { setArmed(false); onConfirm() }}>
+      {confirmLabel}
+    </button>
+  )
+}
+
+function PackForm({ onAdd }) {
+  const [name, setName] = useState('')
+  const [text, setText] = useState('')
+  const entries = useMemo(() => parseEntries(text), [text])
+  const words = useMemo(() => buildPackWords(entries), [entries])
+  const skipped = entries.length - words.length
+
+  function submit(event) {
+    event.preventDefault()
+    if (!words.length) return
+    onAdd(name, words)
+    setName('')
+    setText('')
+  }
+
+  return (
+    <form className="pack-form" onSubmit={submit}>
+      <div className="field">
+        <label htmlFor="pack-name">List name</label>
+        <input id="pack-name" value={name} onChange={(event) => setName(event.target.value)} placeholder="Week of March 3" maxLength={40} />
+      </div>
+      <div className="field">
+        <label htmlFor="pack-words">Spelling words</label>
+        <textarea
+          id="pack-words"
+          rows={6}
+          value={text}
+          onChange={(event) => setText(event.target.value)}
+          placeholder={'rocket\nplanet\ncomet\n\nOr add your own sentence:\nrocket: The rocket lifted off at dawn.'}
+        />
+        <p className="field-help">
+          One word per line, or separated by commas. Add <code>word: sentence</code> to use your own sentence —
+          otherwise Spell Trail writes one. Up to {MAX_PACK_WORDS} words.
+        </p>
+      </div>
+      <div className="pack-preview" aria-live="polite">
+        {words.length ? (
+          <>
+            <b>{words.length} word{words.length === 1 ? '' : 's'} ready</b>
+            <span>{words.map((entry) => entry.chunks.join('·')).join('   ')}</span>
+            {skipped > 0 ? <small>{skipped} skipped as blank or duplicate.</small> : null}
+          </>
+        ) : (
+          <span>Type some words to see how they will be broken into pieces.</span>
+        )}
+      </div>
+      <button className="check-button" type="submit" disabled={!words.length}>Save this list</button>
+    </form>
+  )
+}
+
+function Family({ store, profile, onBack, onSwitch, onAddProfile, onRemoveProfile, onAddPack, onRemovePack, onResetProfile }) {
+  const [newName, setNewName] = useState('')
+  return (
+    <main className="rewards-shell family-shell">
+      <button className="back-button" type="button" onClick={onBack}>← Trail map</button>
+      <div className="rewards-heading">
+        <span className="soft-label">GROWN-UPS</span>
+        <h1>Players & word lists</h1>
+        <p>Everything stays on this device. No account, no sign-in.</p>
+      </div>
+
+      <section className="family-card">
+        <h2>Who is playing?</h2>
+        <div className="profile-grid">
+          {store.profiles.map((entry) => (
+            <div className={`profile-card ${entry.id === profile.id ? 'selected' : ''}`} style={{ '--tier-color': entry.color }} key={entry.id}>
+              <button className="profile-pick" type="button" onClick={() => onSwitch(entry.id)} aria-pressed={entry.id === profile.id}>
+                <span className="profile-avatar" aria-hidden="true">{entry.avatar}</span>
+                <strong>{entry.name}</strong>
+                <small>Level {levelFromXp(entry.progress.xp)} · {entry.progress.wordsPracticed} words</small>
+                <span className="tier-state">{entry.id === profile.id ? '✓ Playing now' : 'Switch to this player'}</span>
+              </button>
+              {store.profiles.length > 1 ? (
+                <ConfirmButton className="tiny-button" label="Remove" confirmLabel="Tap again to remove" onConfirm={() => onRemoveProfile(entry.id)} />
+              ) : null}
+            </div>
+          ))}
+        </div>
+        {store.profiles.length < MAX_PROFILES ? (
+          <form
+            className="add-profile"
+            onSubmit={(event) => { event.preventDefault(); onAddProfile(newName); setNewName('') }}
+          >
+            <label htmlFor="new-player">Add a player</label>
+            <input id="new-player" value={newName} onChange={(event) => setNewName(event.target.value)} placeholder="Name" maxLength={MAX_NAME_LENGTH} />
+            <button className="check-button" type="submit" disabled={!cleanName(newName)}>Add</button>
+          </form>
+        ) : <p className="field-help">That is the maximum of {MAX_PROFILES} players.</p>}
+      </section>
+
+      <section className="family-card">
+        <h2>{profile.name}'s spelling lists</h2>
+        <p className="field-help">Type in the words from school. They become full trails with listening, building, and typing.</p>
+        {profile.packs.length ? (
+          <ul className="pack-list">
+            {profile.packs.map((pack) => (
+              <li key={pack.id}>
+                <div>
+                  <b>{pack.name}</b>
+                  <small>{pack.words.map((entry) => entry.word).join(', ')}</small>
+                </div>
+                <ConfirmButton className="tiny-button" label="Delete" confirmLabel="Tap again to delete" onConfirm={() => onRemovePack(pack.id)} />
+              </li>
+            ))}
+          </ul>
+        ) : <p className="empty-note">No lists yet.</p>}
+        <PackForm onAdd={onAddPack} />
+      </section>
+
+      <section className="family-card danger-card">
+        <h2>Reset {profile.name}'s progress</h2>
+        <p className="field-help">Clears XP, badges, and streaks for this player only. Word lists are kept.</p>
+        <ConfirmButton label="Reset progress" confirmLabel="Tap again to erase this player's progress" onConfirm={onResetProfile} />
+      </section>
+    </main>
+  )
 }
 
 export default function App() {
-  const [progress, setProgress] = useState(() => loadProgress())
-  const [selectedTier, setSelectedTier] = useState(WORD_TIERS[1])
+  const [store, setStore] = useState(() => loadStore())
+  const [selection, setSelection] = useState({ kind: 'tier', id: DEFAULT_TIER_ID })
   const [view, setView] = useState('home')
   const [summary, setSummary] = useState(null)
   const [newBadges, setNewBadges] = useState([])
+  const [saveFailed, setSaveFailed] = useState(false)
+  const audio = useAudioAvailable()
 
-  useEffect(() => { localStorage.setItem(STORAGE_KEY, JSON.stringify(progress)) }, [progress])
+  const profile = activeProfile(store)
+  const source = useMemo(() => resolveSource(selection, profile), [selection, profile])
+
+  useEffect(() => { setSaveFailed(!saveStore(store)) }, [store])
   useEffect(() => { window.scrollTo({ top: 0, behavior: 'instant' }) }, [view])
+  useEffect(() => stopSpeaking, [])
+
+  function setProgress(progress) {
+    setStore((current) => updateProfile(current, current.activeId, (entry) => ({ ...entry, progress })))
+  }
+
   function completeRound(roundSummary) {
-    const before = new Set(progress.badges)
-    const finished = finishSession(progress)
+    const before = new Set(profile.progress.badges)
+    const finished = finishSession(profile.progress)
     setProgress(finished)
     setNewBadges(BADGES.filter((badge) => finished.badges.includes(badge.id) && !before.has(badge.id)))
     setSummary(roundSummary)
     setView('complete')
   }
-  function resetDemo() { setProgress(DEFAULT_PROGRESS); setView('home') }
 
-  return <div className="app"><Header progress={progress} view={view} onHome={() => setView('home')} />{view === 'home' ? <Home progress={progress} selectedTier={selectedTier} onTierChange={setSelectedTier} onStart={() => setView('game')} onShowRewards={() => setView('rewards')} /> : null}{view === 'game' ? <Game tier={selectedTier} progress={progress} onProgress={setProgress} onComplete={completeRound} onExit={() => setView('home')} /> : null}{view === 'complete' && summary ? <Complete summary={summary} progress={progress} newBadges={newBadges} onHome={() => setView('home')} onReplay={() => setView('game')} /> : null}{view === 'rewards' ? <Rewards progress={progress} onBack={() => setView('home')} /> : null}<footer><span>Spell Trail saves progress on this device.</span><button type="button" onClick={resetDemo}>Reset progress</button></footer></div>
+  function leaveGame(nextView) {
+    stopSpeaking()
+    setView(nextView)
+  }
+
+  function switchProfile(id) {
+    stopSpeaking()
+    setStore((current) => ({ ...current, activeId: id }))
+    setSelection({ kind: 'tier', id: DEFAULT_TIER_ID })
+    setView('home')
+  }
+
+  return (
+    <div className="app">
+      <Header
+        profile={profile}
+        view={view}
+        onHome={() => leaveGame('home')}
+        onSwitch={() => leaveGame('family')}
+      />
+      {view === 'home' ? (
+        <Home
+          profile={profile}
+          selection={selection}
+          source={source}
+          onSelect={setSelection}
+          onStart={() => setView('game')}
+          onShowRewards={() => setView('rewards')}
+          onShowFamily={() => setView('family')}
+        />
+      ) : null}
+      {view === 'game' ? (
+        <Game
+          source={source}
+          progress={profile.progress}
+          onProgress={setProgress}
+          onComplete={completeRound}
+          onExit={() => leaveGame('home')}
+          audio={audio}
+        />
+      ) : null}
+      {view === 'complete' && summary ? (
+        <Complete summary={summary} progress={profile.progress} newBadges={newBadges} onHome={() => setView('home')} onReplay={() => setView('game')} />
+      ) : null}
+      {view === 'rewards' ? <Rewards progress={profile.progress} onBack={() => setView('home')} /> : null}
+      {view === 'family' ? (
+        <Family
+          store={store}
+          profile={profile}
+          onBack={() => setView('home')}
+          onSwitch={switchProfile}
+          onAddProfile={(name) => setStore((current) => addProfile(current, name))}
+          onRemoveProfile={(id) => setStore((current) => removeProfile(current, id))}
+          onAddPack={(name, words) => setStore((current) => updateProfile(current, current.activeId, (entry) => ({ ...entry, packs: [...entry.packs, createPack(name, words)] })))}
+          onRemovePack={(id) => {
+            setStore((current) => updateProfile(current, current.activeId, (entry) => ({ ...entry, packs: entry.packs.filter((pack) => pack.id !== id) })))
+            setSelection((current) => (current.kind === 'pack' && current.id === id ? { kind: 'tier', id: DEFAULT_TIER_ID } : current))
+          }}
+          onResetProfile={() => setStore((current) => updateProfile(current, current.activeId, (entry) => ({ ...entry, progress: newProgress() })))}
+        />
+      ) : null}
+      <footer>
+        <span>{saveFailed ? 'Progress cannot be saved in this browser window.' : 'Spell Trail saves progress on this device.'}</span>
+        <button type="button" onClick={() => setView('family')}>Players & word lists</button>
+      </footer>
+    </div>
+  )
 }

@@ -1,6 +1,24 @@
 export const STORAGE_KEY = 'spell-trail-progress-v1'
 
-export const DEFAULT_PROGRESS = {
+export const XP_PER_LEVEL = 120
+export const SESSION_BONUS = 30
+export const CORRECT_XP = 12
+export const PARTICIPATION_XP = 4
+export const PRACTICE_XP = 6
+export const STREAK_BONUS_CAP = 5
+export const STREAK_FIREFLY_BONUS_AT = 3
+export const ROUND_LENGTH = 8
+export const TYPE_SHARE = 0.25
+
+export const DEFAULT_WORD_STAT = Object.freeze({
+  right: 0,
+  tries: 0,
+  lastSeen: 0,
+  lastWrong: 0,
+  missedModes: {},
+})
+
+export const DEFAULT_PROGRESS = Object.freeze({
   xp: 0,
   fireflies: 0,
   streak: 0,
@@ -10,7 +28,7 @@ export const DEFAULT_PROGRESS = {
   sessionsCompleted: 0,
   badges: [],
   mastered: {},
-}
+})
 
 export const BADGES = [
   { id: 'first-step', icon: '🥾', label: 'First Step', detail: 'Finish your first trail', test: (p) => p.sessionsCompleted >= 1 },
@@ -20,11 +38,19 @@ export const BADGES = [
 ]
 
 export function levelFromXp(xp) {
-  return Math.floor(xp / 120) + 1
+  return Math.floor(xp / XP_PER_LEVEL) + 1
 }
 
 export function levelProgress(xp) {
-  return (xp % 120) / 120
+  return (xp % XP_PER_LEVEL) / XP_PER_LEVEL
+}
+
+export function xpIntoLevel(xp) {
+  return xp % XP_PER_LEVEL
+}
+
+export function xpToNextLevel(xp) {
+  return XP_PER_LEVEL - xpIntoLevel(xp)
 }
 
 export function shuffle(items, random = Math.random) {
@@ -36,44 +62,223 @@ export function shuffle(items, random = Math.random) {
   return result
 }
 
-export function makeRound(tier, random = Math.random) {
-  const words = shuffle(tier.words, random)
-  return words.map((entry, index) => ({
-    ...entry,
-    mode: index === 3 || index === 7 ? 'type' : index % 3 === 0 ? 'listen' : index % 3 === 1 ? 'missing' : 'chunks',
-  }))
+/* ---------------------------------------------------------------- modes -- */
+
+export const MODES = ['listen', 'missing', 'chunks', 'type']
+
+// A mode can only be used for a word that carries the data it needs. Curated
+// tier words carry everything; a parent-entered word may carry nothing but the
+// word itself, so every mode has to say what it requires.
+const MODE_REQUIREMENTS = {
+  listen: (word) => Array.isArray(word.distractors) && word.distractors.length >= 2,
+  missing: (word) => Array.isArray(word.chunks) && word.chunks.length >= 2,
+  chunks: (word) => Array.isArray(word.chunks) && word.chunks.length >= 2,
+  type: () => true,
 }
 
-export function awardAnswer(progress, word, isCorrect) {
-  const streak = isCorrect ? progress.streak + 1 : 0
-  const xpEarned = isCorrect ? 12 + Math.min(streak, 5) : 4
-  const firefliesEarned = isCorrect ? (streak >= 3 ? 2 : 1) : 0
-  const mastered = { ...progress.mastered }
-  const previous = mastered[word] || { right: 0, tries: 0 }
-  mastered[word] = { right: previous.right + (isCorrect ? 1 : 0), tries: previous.tries + 1 }
+export function supportedModes(word, { audio = true } = {}) {
+  return MODES.filter((mode) => {
+    if (mode === 'type' && !audio) return false
+    return MODE_REQUIREMENTS[mode](word)
+  })
+}
+
+export function resolveMode(word, wanted, { audio = true } = {}) {
+  const available = supportedModes(word, { audio })
+  if (available.includes(wanted)) return wanted
+  // Prefer any non-typing fallback so a round does not turn into all typing.
+  return available.find((mode) => mode !== 'type') || available[0] || 'type'
+}
+
+// Easiest to hardest: picking from three spellings gives the most support,
+// typing from memory the least.
+export const MODE_DIFFICULTY = ['listen', 'missing', 'chunks', 'type']
+
+export function easierMode(word, mode, { audio = true } = {}) {
+  const available = supportedModes(word, { audio })
+  const current = MODE_DIFFICULTY.indexOf(mode)
+  for (let step = current - 1; step >= 0; step -= 1) {
+    if (available.includes(MODE_DIFFICULTY[step])) return MODE_DIFFICULTY[step]
+  }
+  return available.find((entry) => entry !== mode) || mode
+}
+
+// A missed word comes back before the trail ends, one step easier than the
+// mode it was missed in — seeing it again is the point, not scoring it again.
+export function makeRetry(item, { audio = true } = {}) {
+  return { ...item, mode: easierMode(item, item.mode, { audio }), retry: true }
+}
+
+// Typing checkpoints land at evenly spaced positions, ending on the last
+// question. At length 8 that is indices 3 and 7; at length 3 it is index 2.
+export function planModes(length, random = Math.random) {
+  if (length <= 0) return []
+  const typeCount = Math.min(length, Math.max(1, Math.round(length * TYPE_SHARE)))
+  const typeSlots = new Set()
+  for (let slot = 1; slot <= typeCount; slot += 1) {
+    typeSlots.add(Math.round((slot * length) / typeCount) - 1)
+  }
+  const cycle = shuffle(['listen', 'missing', 'chunks'], random)
+  const plan = []
+  let cursor = 0
+  for (let index = 0; index < length; index += 1) {
+    if (typeSlots.has(index)) {
+      plan.push('type')
+      continue
+    }
+    plan.push(cycle[cursor % cycle.length])
+    cursor += 1
+  }
+  return plan
+}
+
+// Word selection, round length, and mode assignment are independent inputs so
+// a round can be built from a tier, a review queue, a daily seed, or a custom
+// word pack without changing anything below this line.
+export function buildRound({ words, length, random = Math.random, audio = true }) {
+  const pool = shuffle(words, random)
+  const wanted = length == null ? pool.length : Math.min(length, pool.length)
+  const picked = pool.slice(0, Math.max(0, wanted))
+  const plan = planModes(picked.length, random)
+  return picked.map((entry, index) => ({ ...entry, mode: resolveMode(entry, plan[index], { audio }) }))
+}
+
+/* --------------------------------------------------------------- blanks -- */
+
+const VOWELS = ['a', 'e', 'i', 'o', 'u']
+
+// Fallback only. Curated words carry an authored `blank`, because generated
+// decoys are non-words a player can eliminate without knowing the spelling.
+export function generateDecoys(target) {
+  if (target.length === 1) {
+    return VOWELS.filter((vowel) => vowel !== target)
+  }
+  const pool = []
+  // Swapping a vowel keeps the chunk pronounceable, so the player has to know
+  // the spelling rather than spot the one option that looks like English.
+  for (let index = 0; index < target.length; index += 1) {
+    if (!VOWELS.includes(target[index])) continue
+    for (const vowel of VOWELS) {
+      if (vowel !== target[index]) pool.push(target.slice(0, index) + vowel + target.slice(index + 1))
+    }
+  }
+  const last = target[target.length - 1]
+  if (!VOWELS.includes(last)) pool.push(target + last)
+  pool.push(target.slice(0, -1))
+  // Only reached for chunks with no vowel to swap, e.g. 'thm'.
+  pool.push(target[0] + target)
+  pool.push(target.split('').reverse().join(''))
+  return [...new Set(pool)].filter((option) => option && option !== target)
+}
+
+export function blankFor(word, random = Math.random) {
+  const chunks = word.chunks || []
+  const authored = word.blank
+  const at = Math.min(authored ? authored.at : Math.max(0, chunks.length - 2), Math.max(0, chunks.length - 1))
+  const target = chunks[at]
+  const source = authored?.options?.length ? authored.options : generateDecoys(target)
+  // Trim decoys *before* adding the target so shuffling can never drop it.
+  const decoys = [...new Set(source)].filter((option) => option !== target).slice(0, 2)
+  return { at, target, options: shuffle([target, ...decoys], random) }
+}
+
+export function blankSentence(sentence, word) {
+  const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return sentence.replace(new RegExp(escaped, 'i'), '_____')
+}
+
+/* ------------------------------------------------------------- progress -- */
+
+// `practice` marks a second look at a word already missed this trail. It still
+// updates that word's record, but it does not touch the streak or the accuracy
+// counters — those describe first attempts, and a retry should never feel like
+// a way to inflate them or a way to lose a streak twice for one mistake.
+export function awardAnswer(progress, word, isCorrect, { mode = null, now = Date.now(), practice = false } = {}) {
+  const streak = practice ? progress.streak : (isCorrect ? progress.streak + 1 : 0)
+  const xpEarned = practice
+    ? (isCorrect ? PRACTICE_XP : 0)
+    : (isCorrect ? CORRECT_XP + Math.min(streak, STREAK_BONUS_CAP) : PARTICIPATION_XP)
+  const firefliesEarned = practice
+    ? (isCorrect ? 1 : 0)
+    : (isCorrect ? (streak >= STREAK_FIREFLY_BONUS_AT ? 2 : 1) : 0)
+
+  const previous = progress.mastered[word]
+  const missedModes = { ...(previous?.missedModes || {}) }
+  if (!isCorrect && mode) missedModes[mode] = (missedModes[mode] || 0) + 1
+
+  const stat = {
+    right: (previous?.right || 0) + (isCorrect ? 1 : 0),
+    tries: (previous?.tries || 0) + 1,
+    lastSeen: now,
+    lastWrong: isCorrect ? previous?.lastWrong || 0 : now,
+    missedModes,
+  }
+
   return {
-    ...progress,
-    xp: progress.xp + xpEarned,
-    fireflies: progress.fireflies + firefliesEarned,
-    streak,
-    bestStreak: Math.max(progress.bestStreak, streak),
-    wordsPracticed: progress.wordsPracticed + 1,
-    correctAnswers: progress.correctAnswers + (isCorrect ? 1 : 0),
-    mastered,
+    xpEarned,
+    firefliesEarned,
+    progress: {
+      ...progress,
+      xp: progress.xp + xpEarned,
+      fireflies: progress.fireflies + firefliesEarned,
+      streak,
+      bestStreak: Math.max(progress.bestStreak, streak),
+      wordsPracticed: progress.wordsPracticed + (practice ? 0 : 1),
+      correctAnswers: progress.correctAnswers + (!practice && isCorrect ? 1 : 0),
+      mastered: { ...progress.mastered, [word]: stat },
+    },
   }
 }
 
 export function finishSession(progress) {
-  const next = { ...progress, sessionsCompleted: progress.sessionsCompleted + 1, xp: progress.xp + 30 }
-  const badges = BADGES.filter((badge) => badge.test(next)).map((badge) => badge.id)
-  return { ...next, badges }
+  const next = {
+    ...progress,
+    sessionsCompleted: progress.sessionsCompleted + 1,
+    xp: progress.xp + SESSION_BONUS,
+  }
+  const earned = BADGES.filter((badge) => badge.test(next)).map((badge) => badge.id)
+  // Union, never a replacement: a badge already discovered is never taken back.
+  return { ...next, badges: [...new Set([...progress.badges, ...earned])] }
+}
+
+function normalizeMastered(raw) {
+  const out = {}
+  if (!raw || typeof raw !== 'object') return out
+  for (const [word, stat] of Object.entries(raw)) {
+    if (!stat || typeof stat !== 'object') continue
+    out[word] = { ...DEFAULT_WORD_STAT, ...stat, missedModes: { ...(stat.missedModes || {}) } }
+  }
+  return out
+}
+
+export function normalizeProgress(saved) {
+  if (!saved || typeof saved !== 'object') return newProgress()
+  return {
+    ...DEFAULT_PROGRESS,
+    ...saved,
+    badges: Array.isArray(saved.badges) ? [...new Set(saved.badges)] : [],
+    mastered: normalizeMastered(saved.mastered),
+  }
 }
 
 export function loadProgress(storage = localStorage) {
   try {
-    const saved = JSON.parse(storage.getItem(STORAGE_KEY))
-    return saved ? { ...DEFAULT_PROGRESS, ...saved } : DEFAULT_PROGRESS
+    return normalizeProgress(JSON.parse(storage.getItem(STORAGE_KEY)))
   } catch {
-    return DEFAULT_PROGRESS
+    return newProgress()
   }
+}
+
+export function saveProgress(progress, storage = localStorage) {
+  try {
+    storage.setItem(STORAGE_KEY, JSON.stringify(progress))
+    return true
+  } catch {
+    // Private-mode or quota failures must not take the game down.
+    return false
+  }
+}
+
+export function newProgress() {
+  return { ...DEFAULT_PROGRESS, badges: [], mastered: {} }
 }
