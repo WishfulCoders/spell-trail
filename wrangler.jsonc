@@ -16,11 +16,9 @@
       "id": "7b15846d1e874de0b8a787d2d2cb5139"
     }
   ],
-  "workers_dev": true
-  // Custom domains for spelltrail.app are added once the placeholder DNS
-  // records at the apex are removed:
-  // "routes": [
-  //   { "pattern": "spelltrail.app", "custom_domain": true },
-  //   { "pattern": "www.spelltrail.app", "custom_domain": true }
-  // ]
+  "workers_dev": true,
+  "routes": [
+    { "pattern": "spelltrail.app", "custom_domain": true },
+    { "pattern": "www.spelltrail.app", "custom_domain": true }
+  ]
 }
