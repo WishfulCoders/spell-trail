@@ -12,6 +12,7 @@ import {
   levelProgress,
   makeRetry,
   newProgress,
+  settleLevelUps,
   xpIntoLevel,
   xpToNextLevel,
 } from './game.js'
@@ -223,7 +224,7 @@ function ListenButton({ word, sentence, audio, voiceUri }) {
   )
 }
 
-function Game({ source, progress, roundLength, onProgress, onComplete, onExit, audio, voiceUri }) {
+function Game({ source, progress, roundLength, onProgress, onComplete, onExit, onLevelUp, audio, voiceUri }) {
   const [base] = useState(() => buildRound({ words: source.words, length: roundLength, audio }))
   const [retries, setRetries] = useState([])
   const [index, setIndex] = useState(0)
@@ -247,11 +248,13 @@ function Game({ source, progress, roundLength, onProgress, onComplete, onExit, a
 
   function answer(isCorrect, choice) {
     if (feedback) return
-    const { progress: next, xpEarned } = awardAnswer(progress, item.word, isCorrect, {
+    const { progress: awarded, xpEarned } = awardAnswer(progress, item.word, isCorrect, {
       mode: item.mode,
       practice: Boolean(item.retry),
     })
+    const { progress: next, levelUps } = settleLevelUps(progress.xp, awarded)
     onProgress(next)
+    if (levelUps.length) onLevelUp(levelUps)
 
     // Queue a missed word for one second look later in the trail. Once only —
     // a word the child is stuck on should not trap them in a loop.
@@ -604,6 +607,41 @@ function BackupPanel({ store, onRestore, onShowPrivacy }) {
   )
 }
 
+function LevelUpModal({ levelUps, onClose }) {
+  const closeRef = useRef(null)
+  useEffect(() => { closeRef.current?.focus() }, [])
+  if (!levelUps.length) return null
+  const top = levelUps[levelUps.length - 1]
+  const fireflies = levelUps.reduce((sum, entry) => sum + entry.fireflies, 0)
+  return (
+    <div className="modal-veil" role="dialog" aria-modal="true" aria-labelledby="levelup-title">
+      <section className="levelup-card">
+        <div className="levelup-burst" aria-hidden="true">
+          <span>✦</span><span>✧</span>
+          <div className="levelup-badge">{top.level}</div>
+          <span>✧</span><span>✦</span>
+        </div>
+        <span className="soft-label">
+          {levelUps.length > 1 ? `${levelUps.length} LEVELS AT ONCE` : 'LEVEL UP'}
+        </span>
+        <h2 id="levelup-title">Congratulations — you reached level {top.level}!</h2>
+        <p>
+          {levelUps.length > 1
+            ? 'Two level-ups in one go. That is a lot of careful spelling.'
+            : 'Your spelling trail just got longer. Keep going and the next one is a little further out.'}
+        </p>
+        <div className="levelup-reward">
+          <span aria-hidden="true">✨</span>
+          <div><b>+{fireflies} fireflies</b><small>Spend them on a trail companion</small></div>
+        </div>
+        <button className="primary-button" type="button" ref={closeRef} onClick={onClose}>
+          <span>Keep going</span><i aria-hidden="true">→</i>
+        </button>
+      </section>
+    </div>
+  )
+}
+
 function Privacy({ onBack }) {
   return (
     <main className="rewards-shell privacy-shell">
@@ -905,6 +943,7 @@ export default function App() {
   const [summary, setSummary] = useState(null)
   const [newBadges, setNewBadges] = useState([])
   const [saveFailed, setSaveFailed] = useState(false)
+  const [levelUps, setLevelUps] = useState([])
   const audio = useAudioAvailable()
 
   const profile = activeProfile(store)
@@ -921,10 +960,13 @@ export default function App() {
   function completeRound(roundSummary) {
     const before = new Set(profile.progress.badges)
     const finished = finishSession(profile.progress)
-    setProgress(finished)
-    setNewBadges(BADGES.filter((badge) => finished.badges.includes(badge.id) && !before.has(badge.id)))
+    // The end-of-trail bonus can be the thing that tips a player over.
+    const { progress: settled, levelUps } = settleLevelUps(profile.progress.xp, finished)
+    setProgress(settled)
+    setNewBadges(BADGES.filter((badge) => settled.badges.includes(badge.id) && !before.has(badge.id)))
     setSummary(roundSummary)
     setView('complete')
+    if (levelUps.length) setLevelUps(levelUps)
   }
 
   function leaveGame(nextView) {
@@ -966,6 +1008,7 @@ export default function App() {
           onProgress={setProgress}
           onComplete={completeRound}
           onExit={() => leaveGame('home')}
+          onLevelUp={setLevelUps}
           audio={audio}
           voiceUri={store.settings?.voiceUri || null}
         />
@@ -1006,6 +1049,7 @@ export default function App() {
           onShowPrivacy={() => setView('privacy')}
         />
       ) : null}
+      {levelUps.length ? <LevelUpModal levelUps={levelUps} onClose={() => setLevelUps([])} /> : null}
       <footer>
         <span>{saveFailed ? 'Progress cannot be saved in this browser window.' : 'Spell Trail saves progress on this device.'}</span>
         <button type="button" onClick={() => setView('family')}>Players & word lists</button>

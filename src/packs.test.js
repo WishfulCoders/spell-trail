@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { blankFor, blankSentence, buildRound, generateDecoys, supportedModes } from './game.js'
+import { blankFor, blankSentence, buildRound, generateDecoys, levelFromXp, supportedModes } from './game.js'
 import { MAX_PACK_WORDS, buildPackWords, buildWordEntry, cleanWord, parseWordList, syllabify } from './wordgen.js'
 import {
   MAX_NAME_LENGTH,
@@ -145,8 +145,11 @@ describe('profile store', () => {
     const legacy = JSON.stringify({ xp: 240, wordsPracticed: 30, badges: ['first-step'] })
     const store = loadStore(memoryStorage({ [LEGACY_KEY]: legacy }))
     expect(store.profiles).toHaveLength(1)
-    expect(activeProfile(store).progress.xp).toBe(240)
+    expect(activeProfile(store).progress.wordsPracticed).toBe(30)
     expect(activeProfile(store).progress.badges).toEqual(['first-step'])
+    // 240 XP was level 3 on the old flat curve; the level survives the change
+    // even though the raw number does not.
+    expect(levelFromXp(activeProfile(store).progress.xp)).toBe(3)
   })
 
   it('ignores a legacy save that has no progress in it', () => {

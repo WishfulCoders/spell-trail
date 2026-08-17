@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_PROGRESS,
+  LEVEL_REQUIREMENT_CAP,
+  MAX_LEVEL,
   ROUND_LENGTH,
+  XP_CURVE_VERSION,
   awardAnswer,
   blankFor,
   blankSentence,
@@ -10,12 +13,22 @@ import {
   finishSession,
   generateDecoys,
   levelFromXp,
+  levelProgress,
+  levelUpBonus,
   loadProgress,
   makeRetry,
+  migrateXp,
+  newProgress,
+  normalizeProgress,
   planModes,
   resolveMode,
   saveProgress,
+  settleLevelUps,
   supportedModes,
+  totalXpForLevel,
+  xpForLevelUp,
+  xpIntoLevel,
+  xpToNextLevel,
 } from './game.js'
 import { WORD_TIERS } from './words.js'
 
@@ -60,9 +73,11 @@ describe('progress', () => {
     expect(finishSession(earned).badges).toContain('summit-star')
   })
 
-  it('advances a level every 120 XP', () => {
+  it('starts at level 1 and reaches level 2 in two to four trails', () => {
     expect(levelFromXp(0)).toBe(1)
-    expect(levelFromXp(120)).toBe(2)
+    // A default eight-word trail is worth roughly 105-155 XP.
+    expect(levelFromXp(155 * 2)).toBe(1)
+    expect(levelFromXp(155 * 4)).toBeGreaterThanOrEqual(2)
   })
 })
 
@@ -267,5 +282,109 @@ describe('in-session correction', () => {
   it('awards something for a correct retry but nothing for a second miss', () => {
     expect(awardAnswer(DEFAULT_PROGRESS, 'friend', true, { practice: true }).xpEarned).toBeGreaterThan(0)
     expect(awardAnswer(DEFAULT_PROGRESS, 'friend', false, { practice: true }).xpEarned).toBe(0)
+  })
+})
+
+describe('levelling', () => {
+  // A default eight-word trail is worth roughly 105-155 XP.
+  const TRAIL_LOW = 105
+  const TRAIL_HIGH = 155
+
+  it('needs two to four trails for the first level-up', () => {
+    const needed = xpForLevelUp(1)
+    expect(needed / TRAIL_HIGH).toBeGreaterThanOrEqual(2)
+    expect(needed / TRAIL_LOW).toBeLessThanOrEqual(4)
+  })
+
+  it('asks for more XP at every successive level', () => {
+    for (let level = 1; level < 12; level += 1) {
+      expect(xpForLevelUp(level + 1), `level ${level + 1} should cost more`).toBeGreaterThan(xpForLevelUp(level))
+    }
+  })
+
+  it('caps the requirement so high levels stay reachable', () => {
+    expect(xpForLevelUp(40)).toBeLessThanOrEqual(LEVEL_REQUIREMENT_CAP)
+  })
+
+  it('keeps level, progress, and thresholds consistent', () => {
+    for (const xp of [0, 1, 349, 350, 351, 752, 5875, 99999]) {
+      const level = levelFromXp(xp)
+      expect(totalXpForLevel(level), `level start for ${xp}`).toBeLessThanOrEqual(xp)
+      expect(xpIntoLevel(xp)).toBe(xp - totalXpForLevel(level))
+      expect(levelProgress(xp)).toBeGreaterThanOrEqual(0)
+      expect(levelProgress(xp)).toBeLessThanOrEqual(1)
+      if (level < MAX_LEVEL) {
+        expect(xpIntoLevel(xp) + xpToNextLevel(xp)).toBe(xpForLevelUp(level))
+      }
+    }
+  })
+
+  it('lands exactly on a new level at its threshold', () => {
+    for (let level = 2; level <= 10; level += 1) {
+      expect(levelFromXp(totalXpForLevel(level))).toBe(level)
+      expect(levelFromXp(totalXpForLevel(level) - 1)).toBe(level - 1)
+    }
+  })
+
+  it('never exceeds the maximum level', () => {
+    expect(levelFromXp(Number.MAX_SAFE_INTEGER)).toBe(MAX_LEVEL)
+    expect(xpToNextLevel(Number.MAX_SAFE_INTEGER)).toBe(0)
+    expect(levelProgress(Number.MAX_SAFE_INTEGER)).toBe(1)
+  })
+
+  it('pays a firefly bonus for each level crossed', () => {
+    const before = totalXpForLevel(1)
+    const after = { ...DEFAULT_PROGRESS, xp: totalXpForLevel(2), fireflies: 5 }
+    const { progress, levelUps } = settleLevelUps(before, after)
+    expect(levelUps).toHaveLength(1)
+    expect(levelUps[0].level).toBe(2)
+    expect(progress.fireflies).toBe(5 + levelUpBonus(2))
+  })
+
+  it('pays every level when a single answer crosses two', () => {
+    const after = { ...DEFAULT_PROGRESS, xp: totalXpForLevel(4), fireflies: 0 }
+    const { progress, levelUps } = settleLevelUps(totalXpForLevel(1), after)
+    expect(levelUps.map((entry) => entry.level)).toEqual([2, 3, 4])
+    expect(progress.fireflies).toBe(levelUpBonus(2) + levelUpBonus(3) + levelUpBonus(4))
+  })
+
+  it('pays nothing when no level was crossed', () => {
+    const after = { ...DEFAULT_PROGRESS, xp: 40, fireflies: 7 }
+    const { progress, levelUps } = settleLevelUps(10, after)
+    expect(levelUps).toEqual([])
+    expect(progress.fireflies).toBe(7)
+  })
+
+  it('gives a bigger bonus at higher levels, then holds steady', () => {
+    expect(levelUpBonus(3)).toBeGreaterThan(levelUpBonus(2))
+    expect(levelUpBonus(40)).toBe(levelUpBonus(30))
+  })
+})
+
+describe('xp curve migration', () => {
+  it('keeps the level a player already had', () => {
+    for (const oldLevel of [1, 2, 3, 5, 9]) {
+      const oldXp = (oldLevel - 1) * 120
+      expect(levelFromXp(migrateXp(oldXp)), `old level ${oldLevel}`).toBe(oldLevel)
+    }
+  })
+
+  it('keeps roughly the same progress through the level', () => {
+    // Half way through old level 3.
+    const migrated = migrateXp(2 * 120 + 60)
+    expect(levelFromXp(migrated)).toBe(3)
+    expect(levelProgress(migrated)).toBeCloseTo(0.5, 1)
+  })
+
+  it('runs once and leaves already-converted profiles alone', () => {
+    const once = normalizeProgress({ xp: 240 })
+    expect(once.xpCurve).toBe(XP_CURVE_VERSION)
+    const twice = normalizeProgress(once)
+    expect(twice.xp).toBe(once.xp)
+  })
+
+  it('leaves a brand new profile at zero', () => {
+    expect(normalizeProgress({}).xp).toBe(0)
+    expect(newProgress().xp).toBe(0)
   })
 })

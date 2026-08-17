@@ -1,6 +1,16 @@
 export const STORAGE_KEY = 'spell-trail-progress-v1'
 
-export const XP_PER_LEVEL = 120
+// Levelling curve. A default eight-word trail is worth roughly 105-155 XP, so
+// the first level-up lands after two to three trails and each one after that
+// takes a little longer. The growth is capped so high levels stay reachable
+// rather than becoming a wall.
+export const LEVEL_BASE_XP = 350
+export const LEVEL_GROWTH = 1.15
+export const LEVEL_REQUIREMENT_CAP = 2500
+export const MAX_LEVEL = 50
+export const XP_CURVE_VERSION = 2
+const LEGACY_XP_PER_LEVEL = 120
+
 export const SESSION_BONUS = 30
 export const CORRECT_XP = 12
 export const PARTICIPATION_XP = 4
@@ -34,6 +44,7 @@ export const DEFAULT_WORD_STAT = Object.freeze({
 
 export const DEFAULT_PROGRESS = Object.freeze({
   xp: 0,
+  xpCurve: XP_CURVE_VERSION,
   fireflies: 0,
   streak: 0,
   bestStreak: 0,
@@ -51,20 +62,85 @@ export const BADGES = [
   { id: 'summit-star', icon: '🏔️', label: 'Summit Star', detail: 'Earn 500 XP', test: (p) => p.xp >= 500 },
 ]
 
-export function levelFromXp(xp) {
-  return Math.floor(xp / XP_PER_LEVEL) + 1
+// XP needed to go from `level` to the next one.
+export function xpForLevelUp(level) {
+  if (level >= MAX_LEVEL) return Infinity
+  return Math.min(Math.round(LEVEL_BASE_XP * LEVEL_GROWTH ** (level - 1)), LEVEL_REQUIREMENT_CAP)
 }
 
-export function levelProgress(xp) {
-  return (xp % XP_PER_LEVEL) / XP_PER_LEVEL
+// Cumulative XP at which each level begins. Index 0 is unused so that
+// THRESHOLDS[n] is the total XP required to be level n.
+const THRESHOLDS = (() => {
+  const totals = [0, 0]
+  let running = 0
+  for (let level = 1; level < MAX_LEVEL; level += 1) {
+    running += xpForLevelUp(level)
+    totals.push(running)
+  }
+  return totals
+})()
+
+// Total XP required to reach the start of `level`.
+export function totalXpForLevel(level) {
+  if (level <= 1) return 0
+  return THRESHOLDS[Math.min(level, MAX_LEVEL)]
+}
+
+export function levelFromXp(xp) {
+  const total = Math.max(0, Number(xp) || 0)
+  for (let level = MAX_LEVEL; level >= 1; level -= 1) {
+    if (total >= totalXpForLevel(level)) return level
+  }
+  return 1
 }
 
 export function xpIntoLevel(xp) {
-  return xp % XP_PER_LEVEL
+  return Math.max(0, (Number(xp) || 0) - totalXpForLevel(levelFromXp(xp)))
 }
 
 export function xpToNextLevel(xp) {
-  return XP_PER_LEVEL - xpIntoLevel(xp)
+  const level = levelFromXp(xp)
+  if (level >= MAX_LEVEL) return 0
+  return xpForLevelUp(level) - xpIntoLevel(xp)
+}
+
+export function levelProgress(xp) {
+  const level = levelFromXp(xp)
+  if (level >= MAX_LEVEL) return 1
+  return Math.min(1, xpIntoLevel(xp) / xpForLevelUp(level))
+}
+
+// Levelling up pays out in fireflies rather than XP, so the reward feeds the
+// companion shop instead of compounding back into the curve it came from.
+export function levelUpBonus(level) {
+  return Math.min(10 * level, 80)
+}
+
+// Awards every level crossed between two XP totals, so a single generous
+// answer that jumps two levels still pays both bonuses.
+export function settleLevelUps(previousXp, progress) {
+  const from = levelFromXp(previousXp)
+  const to = levelFromXp(progress.xp)
+  if (to <= from) return { progress, levelUps: [] }
+  const levelUps = []
+  let fireflies = progress.fireflies
+  for (let level = from + 1; level <= to; level += 1) {
+    const bonus = levelUpBonus(level)
+    levelUps.push({ level, fireflies: bonus })
+    fireflies += bonus
+  }
+  return { progress: { ...progress, fireflies }, levelUps }
+}
+
+// Players who earned XP under the old flat 120-per-level curve keep the level
+// they had, and their progress through it, instead of appearing to be demoted.
+export function migrateXp(oldXp) {
+  const xp = Math.max(0, Number(oldXp) || 0)
+  const oldLevel = Math.min(Math.floor(xp / LEGACY_XP_PER_LEVEL) + 1, MAX_LEVEL)
+  const into = xp % LEGACY_XP_PER_LEVEL
+  const requirement = xpForLevelUp(oldLevel)
+  const carried = Number.isFinite(requirement) ? Math.round((into / LEGACY_XP_PER_LEVEL) * requirement) : 0
+  return totalXpForLevel(oldLevel) + carried
 }
 
 export function shuffle(items, random = Math.random) {
@@ -267,9 +343,14 @@ function normalizeMastered(raw) {
 
 export function normalizeProgress(saved) {
   if (!saved || typeof saved !== 'object') return newProgress()
+  const curve = Number(saved.xpCurve) || 1
+  const rawXp = Math.max(0, Number(saved.xp) || 0)
   return {
     ...DEFAULT_PROGRESS,
     ...saved,
+    // One-time conversion off the old flat 120-per-level curve.
+    xp: curve < XP_CURVE_VERSION ? migrateXp(rawXp) : rawXp,
+    xpCurve: XP_CURVE_VERSION,
     badges: Array.isArray(saved.badges) ? [...new Set(saved.badges)] : [],
     mastered: normalizeMastered(saved.mastered),
   }

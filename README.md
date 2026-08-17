@@ -65,6 +65,19 @@ one per line or comma-separated, and `word: sentence` supplies your own sentence
 `src/wordgen.js` syllabifies each word and generates misspellings so a bare list still
 plays every game mode.
 
+## Levelling
+
+`xpForLevelUp(level)` grows geometrically from 350 XP, capped at 2500 so high levels stay
+reachable. A default eight-word trail is worth roughly 105-155 XP, so level 2 arrives after two
+to three trails and each level after that takes a little longer. Crossing a level pays a firefly
+bonus (`levelUpBonus`) rather than XP, so the reward feeds the companion shop instead of
+compounding back into the curve it came from. `settleLevelUps` awards every level crossed, so a
+single answer that jumps two still pays both.
+
+Players from the old flat 120-XP-per-level curve are converted once on load (`migrateXp`, guarded
+by `xpCurve`), keeping both their level and their progress through it. Raw XP numbers change;
+the level a child sees does not.
+
 ## Fireflies
 
 Fireflies are the soft currency — one per correct answer, two on a streak of three or
