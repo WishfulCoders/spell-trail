@@ -50,7 +50,7 @@ import { DEFAULT_TIER_ID, WORD_TIERS } from './words.js'
 // subscribed — so the event alone leaves the app believing it has no speech.
 // Poll briefly as well, then give up and fall back to written clues.
 // Change this one line to point the heart somewhere else.
-export const SUPPORT_URL = 'https://buymeacoffee.com/wishfulcoders'
+export const SUPPORT_URL = 'https://buymeacoffee.com/wishfulcoder'
 
 const VOICE_POLL_MS = 250
 const VOICE_GIVE_UP_MS = 4000
