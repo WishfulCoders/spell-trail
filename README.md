@@ -11,7 +11,8 @@ npm install
 npm run dev
 ```
 
-Everything is stored in the browser with `localStorage`. No account or backend.
+Progress lives in the browser with `localStorage`. There are no accounts. The only thing that
+leaves the device is an optional backup the grown-up asks for — see **Backup** below.
 
 ## How a trail is built
 
@@ -42,15 +43,15 @@ describe first attempts only.
 
 ## Word data
 
-`src/words.js` has six tiers of thirty-two words. Every entry carries a sentence,
+`src/words.js` has six tiers of sixty-four words (384 in total). Every entry carries a sentence,
 syllable chunks, two plausible misspellings, and an authored fill-the-gap blank. Decoys
 are hand-written because generated ones tend to be non-words a player can eliminate
 without knowing the spelling. `src/game.test.js` enforces the invariants — chunks must
 rejoin into the word, the sentence must contain it, and every blank must offer three
 distinct options including the answer.
 
-Trails draw eight words from a pool of thirty-two, so replaying a tier gives a mostly
-different set each time.
+Trails draw their words from a pool of sixty-four, so replaying a tier gives a mostly
+different set each time. A test fails the build if any word appears in two tiers.
 
 ## Players and custom word lists
 
