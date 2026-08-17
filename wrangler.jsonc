@@ -1,10 +1,25 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
+
+  // ---------------------------------------------------------------------------
+  // This is the *contributor* config. It deliberately holds no account ID, no
+  // real KV namespace ID, and no custom domains, so that `wrangler dev` and
+  // `wrangler deploy` from a fresh clone can only ever touch your own account.
+  //
+  // To run the backup API locally you need your own KV namespace:
+  //
+  //     npx wrangler kv namespace create BACKUPS
+  //
+  // then paste the id it prints into `kv_namespaces[0].id` below. That edit is
+  // yours alone — please don't commit it.
+  //
+  // Production (spelltrail.app) deploys from `wrangler.prod.jsonc`, which is
+  // gitignored. See CLAUDE.md → "Configuration and deploys".
+  // ---------------------------------------------------------------------------
+
   "name": "spell-trail",
   "main": "worker/index.js",
   "compatibility_date": "2026-08-16",
-  // This login can see more than one account, so pin the target explicitly.
-  "account_id": "4fb16a58f8142b7c35c5b55fcc17b033",
   "assets": {
     "directory": "./dist",
     "not_found_handling": "single-page-application",
@@ -13,12 +28,8 @@
   "kv_namespaces": [
     {
       "binding": "BACKUPS",
-      "id": "7b15846d1e874de0b8a787d2d2cb5139"
+      "id": "REPLACE_WITH_YOUR_OWN_KV_NAMESPACE_ID"
     }
   ],
-  "workers_dev": true,
-  "routes": [
-    { "pattern": "spelltrail.app", "custom_domain": true },
-    { "pattern": "www.spelltrail.app", "custom_domain": true }
-  ]
+  "workers_dev": true
 }

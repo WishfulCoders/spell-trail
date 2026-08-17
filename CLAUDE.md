@@ -10,10 +10,10 @@ what to be careful about" companion.
 | --- | --- |
 | Live at | `spelltrail.app`, `www.spelltrail.app`, `spell-trail.wishfulcoders.workers.dev` |
 | Landing site | `about.spelltrail.app` (GitHub Pages, from `site/`) |
-| Cloudflare account | wishfulcoders@gmail.com (`4fb16a58f8142b7c35c5b55fcc17b033`) |
+| Cloudflare account | wishfulcoders@gmail.com — account ID lives in `wrangler.prod.jsonc`, which is gitignored |
 | Zone | `spelltrail.app`, active, TLS auto-renewed by Cloudflare |
-| Storage | `BACKUPS` KV (`7b15846d1e874de0b8a787d2d2cb5139`) — optional backups only |
-| Repo | `github.com/wishfulcoders/spell-trail`, committed directly to `main` |
+| Storage | `BACKUPS` KV — optional backups only; namespace ID also in `wrangler.prod.jsonc` |
+| Repo | `github.com/wishfulcoders/spell-trail`, public, committed directly to `main` |
 
 Shipped: six tiers of 64 words, five question modes, review camp, in-session
 correction, an "I don't know" escape on every question, per-trail passed-off counts,
@@ -209,19 +209,34 @@ The footer carries **A Wishful Coders app**, linking to `STUDIO_URL`
 use, so the studio reads the same wherever someone meets it. Markup is
 `<a class="studio-line">A <b>Wishful Coders</b> app</a>`.
 
-## Deploy
+## Configuration and deploys
 
-The Worker serves the API and the static build together. It lives on the
-**wishfulcoders@gmail.com** Cloudflare account (`account_id` is pinned in `wrangler.jsonc`
-because that login can see more than one account), alongside the `spelltrail.app` zone.
+Since the repo went public there are **two** Worker configs, and the split is the only
+thing stopping a contributor from deploying over production:
+
+| File | Tracked? | Holds |
+| --- | --- | --- |
+| `wrangler.jsonc` | committed | No account ID, a `REPLACE_WITH_YOUR_OWN_KV_NAMESPACE_ID` placeholder, no custom domains |
+| `wrangler.prod.jsonc` | **gitignored** | The real account ID, the real `BACKUPS` namespace ID, and the `spelltrail.app` / `www` custom domains |
+
+`npm run deploy` passes `-c wrangler.prod.jsonc`, so it only works on a machine that has
+that file. A fresh clone that runs `wrangler deploy` hits its own account and fails on the
+placeholder namespace — which is the intended, loud failure.
+
+Wrangler has no environment-variable substitution for binding IDs (only `account_id` has
+a `CLOUDFLARE_ACCOUNT_ID` equivalent), so a second config file is the mechanism rather
+than `.env`. **Don't reintroduce the IDs into `wrangler.jsonc`.** If `wrangler.prod.jsonc`
+is ever lost, both IDs are readable from the Cloudflare dashboard.
 
 ```bash
 npm run deploy
 ```
 
-To run the API locally (the plain `npm run dev` Vite server has no Worker, so backup calls 404):
+To run the API locally (the plain `npm run dev` Vite server has no Worker, so backup calls
+404). This uses the committed config, so it needs your own KV namespace id pasted in:
 
 ```bash
+npx wrangler kv namespace create BACKUPS   # once
 npx wrangler dev
 ```
 

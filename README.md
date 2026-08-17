@@ -74,10 +74,15 @@ npm install
 npm run dev
 ```
 
-That's a plain Vite dev server, which is everything except the backup API. To run the
-Cloudflare Worker that serves the API alongside the built app:
+That's a plain Vite dev server, which is everything except the backup API — and the app
+is fully playable without it, since backups are the only thing that talks to a server.
+
+To run the Cloudflare Worker that serves the API too, you'll need a KV namespace of your
+own. The committed `wrangler.jsonc` ships with a placeholder rather than our production
+IDs, so a clone can only ever touch your own Cloudflare account:
 
 ```bash
+npx wrangler kv namespace create BACKUPS   # once — paste the id into wrangler.jsonc
 npx wrangler dev
 ```
 

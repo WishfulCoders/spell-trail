@@ -8,7 +8,7 @@
     "build": "vite build",
     "test": "vitest run",
     "preview": "vite preview",
-    "deploy": "npm run build && wrangler deploy"
+    "deploy": "npm run build && wrangler deploy -c wrangler.prod.jsonc"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^4.3.4",

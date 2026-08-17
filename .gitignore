@@ -7,3 +7,7 @@ dist/
 # Local editor/agent config, not shared
 .claude/
 
+# Production Worker config: real account + KV namespace IDs and live domains.
+# Kept out of the repo so a clone can only ever deploy to its own account.
+wrangler.prod.jsonc
+
