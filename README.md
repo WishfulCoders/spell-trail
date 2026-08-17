@@ -67,12 +67,26 @@ need no audio, and written clues are shown instead.
 name to its component and copy. Memory trail shows the word for `peekMs(word)` — longer
 words get longer, capped at five seconds — then hides it and asks for it typed.
 
+Both recall modes share `SpellingInput`, which focuses itself on mount so the keyboard is
+already up when a checkpoint asks the child to type. iOS only raises the keyboard when
+the focus happens inside the tap that mounted the input, which covers the typing
+checkpoint and memory trail's "hide it" button, but not memory trail's timer expiring on
+its own — there the child taps the field once.
+
 ## Review camp
 
 A word joins review camp the moment it is missed and leaves after `REVIEW_CLEAR` (2)
 whole-word recall answers, tracked per word as `sinceWrong`. Multiple-choice and chunk
 questions do not advance that counter, so two lucky picks cannot clear a word the child
 has not spelled. A correct memory-trail second look does count.
+
+Because only recall clears a word, a review trail has to *ask* for recall far more often
+than an ordinary one — `REVIEW_RECALL_SHARE` (0.5) against `RECALL_SHARE` (0.25).
+Without that the exit is gated on a question the trail rarely asks: at the ordinary
+share a perfect player needs about twelve trails to empty an eight-word camp, against
+seven at the review share, and any new mistakes refill it faster than that drains. Two
+tests in `src/game.test.js` walk a seeded player through review trails and hold the
+line on both the absolute count and the comparison.
 
 `reviewWords(progress, pool)` returns the missed words neediest-first — fewest recall
 answers since the miss, then the freshest mistake. `App.jsx` passes it every word the

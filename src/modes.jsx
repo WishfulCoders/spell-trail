@@ -128,9 +128,13 @@ function SpellingInput({ id, label, placeholder, item, onAnswer, feedback }) {
   const inputRef = useRef(null)
   const disabled = Boolean(feedback)
   const state = feedback ? (feedback.isCorrect ? 'is-correct' : 'is-wrong') : ''
-  useEffect(() => {
-    if (window.matchMedia('(min-width: 700px) and (pointer: fine)').matches) inputRef.current?.focus()
-  }, [])
+  // Focus on every device, phones included: a typing checkpoint is asking the
+  // child to type, so the keyboard should already be up rather than costing
+  // them a tap. `preventScroll` keeps the browser from yanking the question out
+  // of view as it opens. iOS only raises the keyboard when focus happens inside
+  // the tap that mounted this input, which covers the typing checkpoint and the
+  // "hide it" button, but not memory trail's own timer running out.
+  useEffect(() => { inputRef.current?.focus({ preventScroll: true }) }, [])
   return (
     <form
       className="type-form"

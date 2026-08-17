@@ -168,6 +168,13 @@ export function passedCount(progress, words) {
 // child could not spell yesterday.
 export const REVIEW_CLEAR = 2
 
+// Only a recall answer walks a word out of camp, so a review trail has to ask
+// for recall far more often than an ordinary trail — otherwise the exit is
+// gated on questions the trail hardly ever asks, and camp never drains. Half:
+// enough that a word meets a recall question most trails, while the supported
+// modes still carry the words the child is stuck on.
+export const REVIEW_RECALL_SHARE = 0.5
+
 export function needsReview(progress, word) {
   const stat = progress?.mastered?.[word]
   if (!stat || !stat.lastWrong) return false
@@ -267,9 +274,9 @@ export const RECALL_MODES = ['type', 'memory']
 
 // Recall checkpoints land at evenly spaced positions, ending on the last
 // question. At length 8 that is indices 3 and 7; at length 3 it is index 2.
-export function planModes(length, random = Math.random) {
+export function planModes(length, random = Math.random, { recallShare = RECALL_SHARE } = {}) {
   if (length <= 0) return []
-  const checkpoints = Math.min(length, Math.max(1, Math.round(length * RECALL_SHARE)))
+  const checkpoints = Math.min(length, Math.max(1, Math.round(length * recallShare)))
   const checkpointAt = new Map()
   for (let slot = 1; slot <= checkpoints; slot += 1) {
     checkpointAt.set(Math.round((slot * length) / checkpoints) - 1, RECALL_MODES[(slot - 1) % RECALL_MODES.length])
@@ -291,11 +298,11 @@ export function planModes(length, random = Math.random) {
 // Word selection, round length, and mode assignment are independent inputs so
 // a round can be built from a tier, a review queue, a daily seed, or a custom
 // word pack without changing anything below this line.
-export function buildRound({ words, length, random = Math.random, audio = true }) {
+export function buildRound({ words, length, random = Math.random, audio = true, recallShare = RECALL_SHARE }) {
   const pool = shuffle(words, random)
   const wanted = length == null ? pool.length : Math.min(length, pool.length)
   const picked = pool.slice(0, Math.max(0, wanted))
-  const plan = planModes(picked.length, random)
+  const plan = planModes(picked.length, random, { recallShare })
   return picked.map((entry, index) => ({ ...entry, mode: resolveMode(entry, plan[index], { audio }) }))
 }
 

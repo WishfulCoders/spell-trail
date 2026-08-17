@@ -13,6 +13,7 @@ import {
   makeRetry,
   newProgress,
   passedCount,
+  REVIEW_RECALL_SHARE,
   reviewWords,
   settleLevelUps,
   UNKNOWN_ANSWER,
@@ -125,7 +126,10 @@ function resolveSource(selection, profile, review) {
   // `priority` says the list is already ordered by need, so a round takes the
   // words at the front instead of sampling the whole pool at random.
   if (selection?.kind === 'review' && review.length) {
-    return { kind: 'review', id: 'review', label: 'Review Camp', color: REVIEW_COLOR, icon: '🏕️', words: review, priority: true }
+    return {
+      kind: 'review', id: 'review', label: 'Review Camp', color: REVIEW_COLOR, icon: '🏕️',
+      words: review, priority: true, recallShare: REVIEW_RECALL_SHARE,
+    }
   }
   if (selection?.kind === 'pack') {
     const pack = profile.packs.find((entry) => entry.id === selection.id)
@@ -209,7 +213,15 @@ function Home({ profile, selection, source, review, onSelect, onStart, onShowRew
           <div className="sun" />
           <div className="cloud cloud-one" /><div className="cloud cloud-two" />
           <div className="mountain mountain-back" /><div className="mountain mountain-front" />
-          <div className="path"><span className="path-dot one" /><span className="path-dot two" /><span className="path-dot three">★</span></div>
+          <div className="path">
+            <svg className="trail-line" viewBox="0 0 460 150" preserveAspectRatio="none">
+              <path className="trail-shadow" d="M -20 139 C 68 83 111 143 190 104 C 252 73 294 25 480 49" />
+              <path className="trail-fill" d="M -20 139 C 68 83 111 143 190 104 C 252 73 294 25 480 49" />
+            </svg>
+            <span className="path-dot one" />
+            <span className="path-dot two" />
+            <span className="path-dot three">★</span>
+          </div>
           <div className="sign"><span>WORD</span><span>TRAIL</span></div>
           <div className="firefly f1">✦</div><div className="firefly f2">✦</div><div className="firefly f3">✦</div>
         </div>
@@ -226,7 +238,7 @@ function Home({ profile, selection, source, review, onSelect, onStart, onShowRew
               track={{ kind: 'review', label: 'Review Camp', color: REVIEW_COLOR, icon: '🏕️', words: review }}
               selected={selection.kind === 'review'}
               roundLength={Math.min(profile.roundLength || ROUND_LENGTH, review.length)}
-              note="Spell one right twice and it leaves camp"
+              note="Spell one from memory twice and it leaves camp"
               onSelect={() => onSelect({ kind: 'review' })}
               onStart={onStart}
             >
@@ -332,6 +344,7 @@ function Game({ source, progress, roundLength, onProgress, onComplete, onExit, o
     words: source.priority ? source.words.slice(0, roundLength) : source.words,
     length: roundLength,
     audio,
+    recallShare: source.recallShare,
   }))
   // Review camp empties as its words are learned, which can change the source
   // under a round in progress — so the trail keeps the name it started with.

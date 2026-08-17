@@ -4,7 +4,9 @@ import {
   LEVEL_REQUIREMENT_CAP,
   MAX_LEVEL,
   RECALL_MODES,
+  RECALL_SHARE,
   REVIEW_CLEAR,
+  REVIEW_RECALL_SHARE,
   ROUND_LENGTH,
   XP_CURVE_VERSION,
   awardAnswer,
@@ -160,6 +162,38 @@ describe('review camp', () => {
     // 'said' has one clean answer behind it, so it needs the least work.
     progress = right(progress, 'said', 4000)
     expect(reviewWords(progress, words).map((entry) => entry.word)).toEqual(['what', 'they', 'said'])
+  })
+
+  // Only a recall answer retires a word, so the exit condition is worthless if a
+  // review trail hardly ever asks for one — camp fills up and never drains. This
+  // walks a perfect player through review trails and counts how many it takes to
+  // empty an eight-word camp. Seeded so the count is a fact, not a coin toss.
+  function trailsToEmptyCamp(recallShare) {
+    let seed = 12345
+    const random = () => ((seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648)
+    const pool = WORD_TIERS[0].words
+    let progress = newProgress()
+    for (const entry of pool.slice(0, 8)) progress = missed(progress, entry.word, 1)
+    let trails = 0
+    while (reviewWords(progress, pool).length && trails < 100) {
+      trails += 1
+      const camp = reviewWords(progress, pool)
+      const round = buildRound({ words: camp.slice(0, 8), length: 8, random, recallShare })
+      for (const entry of round) {
+        progress = awardAnswer(progress, entry.word, true, { mode: entry.mode }).progress
+      }
+    }
+    return trails
+  }
+
+  it('asks for recall often enough that camp actually drains', () => {
+    expect(trailsToEmptyCamp(REVIEW_RECALL_SHARE)).toBeLessThanOrEqual(8)
+  })
+
+  it('drains faster than an ordinary trail would', () => {
+    // The bug this guards: gating the exit on recall while leaving a review
+    // trail at the ordinary one-in-four recall share.
+    expect(trailsToEmptyCamp(REVIEW_RECALL_SHARE)).toBeLessThan(trailsToEmptyCamp(RECALL_SHARE))
   })
 
   it('only gathers words from the pool it was given', () => {
