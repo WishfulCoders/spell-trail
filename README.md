@@ -10,6 +10,7 @@
 [Privacy](https://spelltrail.app) ·
 [A Wishful Coders app](https://wishfulcoders.com)
 
+[![CI](https://github.com/WishfulCoders/spell-trail/actions/workflows/ci.yml/badge.svg)](https://github.com/WishfulCoders/spell-trail/actions/workflows/ci.yml)
 [![License: AGPL v3](https://img.shields.io/badge/license-AGPL--3.0-e56f3d.svg)](./LICENSE)
 [![Commercial license available](https://img.shields.io/badge/commercial%20license-available-f1bd4a.svg)](./COMMERCIAL-LICENSE.md)
 ![No accounts](https://img.shields.io/badge/accounts-none-74ad82.svg)
