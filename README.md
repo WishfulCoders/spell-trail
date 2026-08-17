@@ -70,11 +70,11 @@ words get longer, capped at five seconds — then hides it and asks for it typed
 ## Review camp
 
 A word joins review camp the moment it is missed and leaves after `REVIEW_CLEAR` (2)
-clean answers, tracked per word as `sinceWrong`. The total `right` count cannot do that
-job: a word can be right ten times and still have been missed this morning. A correct
-second look inside a trail counts towards leaving, which is the whole point of it.
+whole-word recall answers, tracked per word as `sinceWrong`. Multiple-choice and chunk
+questions do not advance that counter, so two lucky picks cannot clear a word the child
+has not spelled. A correct memory-trail second look does count.
 
-`reviewWords(progress, pool)` returns the missed words neediest-first — fewest clean
+`reviewWords(progress, pool)` returns the missed words neediest-first — fewest recall
 answers since the miss, then the freshest mistake. `App.jsx` passes it every word the
 player could have met (the six tiers plus their own lists) and shows the track on the
 trail map only when it holds something. A review trail takes the words at the *front*
@@ -84,9 +84,9 @@ of that list rather than sampling it, so the neediest words come up first.
 
 A missed word comes back before the trail ends, once, one step easier than the mode it
 was missed in (`easierMode` walks `MODE_DIFFICULTY` down from typing toward
-listen-and-choose). Second looks are scored as practice: they update that word's record
-for later review, but they do not move the streak or the accuracy counters, which
-describe first attempts only.
+listen-and-choose). Second looks are scored as practice: they update the word record,
+and whole-word recall retries advance Review Camp. They do not move the streak or
+accuracy counters, which describe first attempts only.
 
 ## Word data
 

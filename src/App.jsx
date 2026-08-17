@@ -68,6 +68,17 @@ export const SUPPORT_EMAIL = 'support@spelltrail.app'
 const VOICE_POLL_MS = 250
 const VOICE_GIVE_UP_MS = 4000
 
+const VIEW_HASHES = { home: '', family: '#grown-ups', rewards: '#rewards', privacy: '#privacy', game: '#trail', complete: '#complete' }
+
+function viewFromLocation() {
+  const match = Object.entries(VIEW_HASHES).find(([view, hash]) => ['family', 'rewards', 'privacy'].includes(view) && hash === window.location.hash)
+  return match?.[0] || 'home'
+}
+
+function urlForView(view) {
+  return window.location.pathname + window.location.search + (VIEW_HASHES[view] || '')
+}
+
 function useAudioAvailable() {
   const [available, setAvailable] = useState(() => speechReady())
   useEffect(() => {
@@ -125,7 +136,7 @@ function resolveSource(selection, profile, review) {
   return { kind: 'tier', id: tier.id, label: tier.label, color: tier.color, icon: tier.icon, words: tier.words }
 }
 
-function Header({ profile, onHome, onSwitch, view }) {
+function Header({ profile, onHome, onSwitch }) {
   const level = levelFromXp(profile.progress.xp)
   return (
     <header className="topbar">
@@ -142,7 +153,6 @@ function Header({ profile, onHome, onSwitch, view }) {
         <div className="stat-chip"><span aria-hidden="true">🔥</span><span><b>{profile.progress.streak}</b><small>streak</small></span></div>
         <div className="level-chip"><span>LVL {level}</span><div className="mini-progress"><i style={{ width: `${levelProgress(profile.progress.xp) * 100}%` }} /></div></div>
       </div>
-      {view !== 'home' ? <button className="quiet-button desktop-only" type="button" onClick={onHome}>Exit trail</button> : null}
     </header>
   )
 }
@@ -169,7 +179,7 @@ function TrackCard({ track, selected, passed, roundLength, note, onSelect, onSta
       {selected ? (
         <button className="track-start" type="button" onClick={onStart}>
           <span>Start trail</span>
-          <b>{roundLength} words · 5 min</b>
+          <b>{roundLength} words · no timer</b>
           <i aria-hidden="true">→</i>
         </button>
       ) : null}
@@ -183,7 +193,7 @@ function Home({ profile, selection, source, review, onSelect, onStart, onShowRew
   const accuracy = progress.wordsPracticed ? Math.round((progress.correctAnswers / progress.wordsPracticed) * 100) : 0
   const roundLength = Math.min(profile.roundLength || ROUND_LENGTH, source.words.length)
   return (
-    <main className="home-shell">
+    <main id="main-content" tabIndex="-1" className="home-shell">
       <section className="welcome-card">
         <div className="welcome-copy">
           <span className="soft-label">{profile.name.toUpperCase()}'S ADVENTURE</span>
@@ -315,7 +325,7 @@ function ListenButton({ word, sentence, audio, voiceUri }) {
   )
 }
 
-function Game({ source, progress, roundLength, onProgress, onComplete, onExit, onLevelUp, audio, voiceUri }) {
+function Game({ source, progress, roundLength, onProgress, onComplete, onExit, onLevelUp, onStarted, audio, voiceUri }) {
   // A review trail takes the words at the front of its list — the ones that
   // need it most — instead of sampling every word the player has ever missed.
   const [base] = useState(() => buildRound({
@@ -326,16 +336,22 @@ function Game({ source, progress, roundLength, onProgress, onComplete, onExit, o
   // Review camp empties as its words are learned, which can change the source
   // under a round in progress — so the trail keeps the name it started with.
   const [label] = useState(source.label)
+  const [sourceKind] = useState(source.kind)
   const [retries, setRetries] = useState([])
   const [index, setIndex] = useState(0)
   const [feedback, setFeedback] = useState(null)
   const xpBefore = useRef(progress.xp)
   const missed = useRef(new Set())
+  const nextRef = useRef(null)
 
   const items = useMemo(() => [...base, ...retries], [base, retries])
   const item = items[index]
   const inRetry = index >= base.length
   const isLast = index === items.length - 1
+
+  useEffect(() => {
+    if (feedback) nextRef.current?.focus()
+  }, [feedback])
 
   useEffect(() => {
     if (!audio) return undefined
@@ -348,6 +364,7 @@ function Game({ source, progress, roundLength, onProgress, onComplete, onExit, o
 
   function answer(isCorrect, choice) {
     if (feedback) return
+    onStarted()
     const { progress: awarded, xpEarned } = awardAnswer(progress, item.word, isCorrect, {
       mode: item.mode,
       practice: Boolean(item.retry),
@@ -375,6 +392,7 @@ function Game({ source, progress, roundLength, onProgress, onComplete, onExit, o
         practiced: retries.length,
         earnedXp: progress.xp - xpBefore.current,
         source: label,
+        sourceKind,
       })
       return
     }
@@ -388,7 +406,7 @@ function Game({ source, progress, roundLength, onProgress, onComplete, onExit, o
   const total = inRetry ? retries.length : base.length
   const filled = (step - 1 + (feedback ? 1 : 0)) / total
   return (
-    <main className="game-shell">
+    <main id="main-content" tabIndex="-1" className="game-shell">
       <div className="game-topline">
         <button className="back-button" type="button" onClick={onExit}>← <span>Trail map</span></button>
         <div className="question-progress">
@@ -435,7 +453,7 @@ function Game({ source, progress, roundLength, onProgress, onComplete, onExit, o
               {feedback.queued ? <small className="queued-note">We will come back to this one before the trail ends.</small> : null}
             </div>
             {feedback.xp ? <div className="xp-pop">+{feedback.xp} XP</div> : null}
-            <button className="next-button" type="button" onClick={next}>{isLast ? 'Finish trail' : 'Next word'} →</button>
+            <button className="next-button" type="button" ref={nextRef} onClick={next}>{isLast ? 'Finish trail' : 'Next word'} →</button>
           </div>
         ) : null}
       </section>
@@ -443,9 +461,9 @@ function Game({ source, progress, roundLength, onProgress, onComplete, onExit, o
   )
 }
 
-function Complete({ summary, progress, newBadges, onHome, onReplay }) {
+function Complete({ summary, progress, newBadges, canReplay, onHome, onReplay }) {
   return (
-    <main className="complete-shell">
+    <main id="main-content" tabIndex="-1" className="complete-shell">
       <section className="complete-card">
         <div className="celebration" aria-hidden="true"><span>✦</span><span>✧</span><div>🏕️</div><span>✧</span><span>✦</span></div>
         <span className="soft-label">TRAIL COMPLETE</span>
@@ -468,7 +486,7 @@ function Complete({ summary, progress, newBadges, onHome, onReplay }) {
         ) : null}
         <div className="complete-actions">
           <button className="primary-button" type="button" onClick={onHome}><span>Back to trail map</span><i>→</i></button>
-          <button className="quiet-button" type="button" onClick={onReplay}>Practice this level again</button>
+          {canReplay ? <button className="quiet-button" type="button" onClick={onReplay}>Practice this trail again</button> : null}
         </div>
       </section>
     </main>
@@ -479,7 +497,7 @@ function Rewards({ profile, onBack, onBuy, onEquip }) {
   const { progress } = profile
   const saving = nextCompanion(profile)
   return (
-    <main className="rewards-shell">
+    <main id="main-content" tabIndex="-1" className="rewards-shell">
       <button className="back-button" type="button" onClick={onBack}>← Trail map</button>
       <div className="rewards-heading"><span className="soft-label">FIELD GUIDE</span><h1>Your discoveries</h1><p>Badges celebrate steady practice—not perfect scores.</p></div>
       <div className="badge-grid">
@@ -610,6 +628,7 @@ function VoicePicker({ store, audio, onVoice }) {
       <div className="voice-row">
         <select
           aria-label="Reading voice"
+          name="reading-voice"
           value={chosen || ''}
           onChange={(event) => onVoice(event.target.value)}
         >
@@ -633,6 +652,7 @@ function BackupPanel({ store, onRestore, onShowPrivacy }) {
   const [code, setCode] = useState('')
   const [status, setStatus] = useState(null)
   const [busy, setBusy] = useState(false)
+  const [pendingRestore, setPendingRestore] = useState(null)
   const savedCode = store.backupCode || null
 
   async function run(action) {
@@ -689,26 +709,49 @@ function BackupPanel({ store, onRestore, onShowPrivacy }) {
         className="restore-row"
         onSubmit={(event) => {
           event.preventDefault()
+          setPendingRestore(null)
           run(async () => {
             const restored = await loadBackup(code)
-            onRestore({ profiles: restored.profiles, activeId: restored.activeId, backupCode: restored.code })
-            setCode('')
-            setStatus({ tone: 'good', text: `Restored ${restored.profiles.length} player${restored.profiles.length === 1 ? '' : 's'}.` })
+            setPendingRestore(restored)
+            setStatus(null)
           })
         }}
       >
         <label htmlFor="restore-code">Restore from a code</label>
         <input
           id="restore-code"
+          name="restore-code"
           value={code}
-          onChange={(event) => setCode(event.target.value)}
-          placeholder="otter-summit-ridge-4821"
+          onChange={(event) => { setCode(event.target.value); setPendingRestore(null) }}
+          placeholder="otter-summit-ridge-4821…"
           autoComplete="off"
           spellCheck="false"
         />
         <button className="quiet-button" type="submit" disabled={busy || !code.trim()}>Restore</button>
       </form>
       <p className="field-help">Restoring replaces everything on this device with the backup.</p>
+
+      {pendingRestore ? (
+        <div className="restore-confirm" role="alert">
+          <b>Replace this device's progress?</b>
+          <p>This backup contains {pendingRestore.profiles.map((entry) => entry.name).join(', ')}. Your current players will be replaced.</p>
+          <div className="restore-confirm-actions">
+            <button
+              className="quiet-button danger"
+              type="button"
+              onClick={() => {
+                setCode('')
+                setPendingRestore(null)
+                setStatus({ tone: 'good', text: 'Backup restored.' })
+                onRestore({ profiles: pendingRestore.profiles, activeId: pendingRestore.activeId, backupCode: pendingRestore.code }, true)
+              }}
+            >
+              Replace progress
+            </button>
+            <button className="tiny-button" type="button" onClick={() => setPendingRestore(null)}>Cancel</button>
+          </div>
+        </div>
+      ) : null}
 
       {status ? <p className={`backup-status ${status.tone}`} role="status">{status.text}</p> : null}
     </section>
@@ -717,7 +760,46 @@ function BackupPanel({ store, onRestore, onShowPrivacy }) {
 
 function LevelUpModal({ levelUps, onClose }) {
   const closeRef = useRef(null)
-  useEffect(() => { closeRef.current?.focus() }, [])
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
+  useEffect(() => {
+    const previousFocus = document.activeElement
+    const dialog = closeRef.current?.closest('[role=dialog]')
+    const previousOverflow = document.body.style.overflow
+    const background = [...document.querySelectorAll('.app > :not(.modal-veil)')]
+    background.forEach((element) => { element.inert = true })
+
+    function onKeyDown(event) {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        onCloseRef.current()
+        return
+      }
+      if (event.key !== 'Tab' || !dialog) return
+      const focusable = [...dialog.querySelectorAll('button, a, input, select, textarea')]
+        .filter((element) => !element.disabled)
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last?.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first?.focus()
+      }
+    }
+
+    document.body.style.overflow = 'hidden'
+    document.addEventListener('keydown', onKeyDown)
+    closeRef.current?.focus()
+    return () => {
+      document.body.style.overflow = previousOverflow
+      background.forEach((element) => { element.inert = false })
+      document.removeEventListener('keydown', onKeyDown)
+      if (previousFocus?.isConnected && !previousFocus.disabled) previousFocus.focus()
+      else document.querySelector('.next-button')?.focus()
+    }
+  }, [])
   if (!levelUps.length) return null
   const top = levelUps[levelUps.length - 1]
   const fireflies = levelUps.reduce((sum, entry) => sum + entry.fireflies, 0)
@@ -752,7 +834,7 @@ function LevelUpModal({ levelUps, onClose }) {
 
 function Privacy({ onBack }) {
   return (
-    <main className="rewards-shell privacy-shell">
+    <main id="main-content" tabIndex="-1" className="rewards-shell privacy-shell">
       <button className="back-button" type="button" onClick={onBack}>← Trail map</button>
       <div className="rewards-heading">
         <span className="soft-label">PRIVACY</span>
@@ -854,12 +936,17 @@ function packToText(pack) {
     .join('\n')
 }
 
-function PackForm({ onAdd, editing, onSave, onCancel }) {
+function PackForm({ onAdd, editing, onSave, onCancel, onDirtyChange }) {
   const [name, setName] = useState(editing ? editing.name : '')
   const [text, setText] = useState(editing ? packToText(editing) : '')
+  const initial = useRef({ name: editing ? editing.name : '', text: editing ? packToText(editing) : '' })
   const entries = useMemo(() => parseEntries(text), [text])
   const words = useMemo(() => buildPackWords(entries), [entries])
   const skipped = entries.length - words.length
+  const dirty = name !== initial.current.name || text !== initial.current.text
+
+  useEffect(() => { onDirtyChange(dirty) }, [dirty, onDirtyChange])
+  useEffect(() => () => onDirtyChange(false), [onDirtyChange])
 
   function submit(event) {
     event.preventDefault()
@@ -877,16 +964,18 @@ function PackForm({ onAdd, editing, onSave, onCancel }) {
     <form className="pack-form" onSubmit={submit}>
       <div className="field">
         <label htmlFor="pack-name">List name</label>
-        <input id="pack-name" value={name} onChange={(event) => setName(event.target.value)} placeholder="Week of March 3" maxLength={40} />
+        <input id="pack-name" name="pack-name" autoComplete="off" value={name} onChange={(event) => setName(event.target.value)} placeholder="Week of March 3…" maxLength={40} />
       </div>
       <div className="field">
         <label htmlFor="pack-words">Spelling words</label>
         <textarea
           id="pack-words"
+          name="pack-words"
+          autoComplete="off"
           rows={6}
           value={text}
           onChange={(event) => setText(event.target.value)}
-          placeholder={'rocket\nplanet\ncomet\n\nOr add your own sentence:\nrocket: The rocket lifted off at dawn.'}
+          placeholder={'rocket\nplanet\ncomet\n\nOr add your own sentence:\nrocket: The rocket lifted off at dawn.…'}
         />
         <p className="field-help">
           One word per line, or separated by commas. Add <code>word: sentence</code> to use your own sentence —
@@ -927,10 +1016,11 @@ function ProfileEditor({ profile, onRename, onPickAvatar, onDone }) {
         <label htmlFor={`rename-${profile.id}`}>Name</label>
         <input
           id={`rename-${profile.id}`}
+          name="player-name"
+          autoComplete="off"
           value={name}
           onChange={(event) => setName(event.target.value)}
           maxLength={MAX_NAME_LENGTH}
-          autoFocus
         />
         <button className="check-button" type="submit" disabled={!cleanName(name) || cleanName(name) === profile.name}>Save</button>
       </form>
@@ -960,14 +1050,14 @@ function ProfileEditor({ profile, onRename, onPickAvatar, onDone }) {
 
 function Family({
   store, profile, audio, onBack, onSwitch, onAddProfile, onRemoveProfile, onRename, onPickAvatar,
-  onAddPack, onRemovePack, onSavePack, onResetProfile, onRoundLength, onVoice, onRestoreStore, onShowPrivacy,
+  onAddPack, onRemovePack, onSavePack, onResetProfile, onRoundLength, onVoice, onRestoreStore, onShowPrivacy, onDraftChange,
 }) {
   const [newName, setNewName] = useState('')
   const [editingId, setEditingId] = useState(null)
   const [editingPack, setEditingPack] = useState(null)
   const onEdit = (id) => setEditingId((current) => (current === id ? null : id))
   return (
-    <main className="rewards-shell family-shell">
+    <main id="main-content" tabIndex="-1" className="rewards-shell family-shell">
       <button className="back-button" type="button" onClick={onBack}>← Trail map</button>
       <div className="rewards-heading">
         <span className="soft-label">GROWN-UPS</span>
@@ -1009,7 +1099,7 @@ function Family({
             onSubmit={(event) => { event.preventDefault(); onAddProfile(newName); setNewName('') }}
           >
             <label htmlFor="new-player">Add a player</label>
-            <input id="new-player" value={newName} onChange={(event) => setNewName(event.target.value)} placeholder="Name" maxLength={MAX_NAME_LENGTH} />
+            <input id="new-player" name="new-player" autoComplete="off" value={newName} onChange={(event) => setNewName(event.target.value)} placeholder="Name…" maxLength={MAX_NAME_LENGTH} />
             <button className="check-button" type="submit" disabled={!cleanName(newName)}>Add</button>
           </form>
         ) : <p className="field-help">That is the maximum of {MAX_PROFILES} players.</p>}
@@ -1040,6 +1130,7 @@ function Family({
           onAdd={onAddPack}
           onSave={(id, name, words) => { onSavePack(id, name, words); setEditingPack(null) }}
           onCancel={() => setEditingPack(null)}
+          onDirtyChange={onDraftChange}
         />
       </section>
 
@@ -1060,20 +1151,69 @@ function Family({
 export default function App() {
   const [store, setStore] = useState(() => loadStore())
   const [selection, setSelection] = useState({ kind: 'tier', id: DEFAULT_TIER_ID })
-  const [view, setView] = useState('home')
+  const [view, setView] = useState(() => viewFromLocation())
   const [summary, setSummary] = useState(null)
   const [newBadges, setNewBadges] = useState([])
   const [saveFailed, setSaveFailed] = useState(false)
   const [levelUps, setLevelUps] = useState([])
+  const [gameStarted, setGameStarted] = useState(false)
+  const [hasUnsavedPack, setHasUnsavedPack] = useState(false)
+  const viewRef = useRef(view)
+  const gameStartedRef = useRef(gameStarted)
+  const unsavedPackRef = useRef(hasUnsavedPack)
   const audio = useAudioAvailable()
 
   const profile = activeProfile(store)
   const review = useMemo(() => reviewWords(profile.progress, knownWords(profile)), [profile])
   const source = useMemo(() => resolveSource(selection, profile, review), [selection, profile, review])
+  viewRef.current = view
+  gameStartedRef.current = gameStarted
+  unsavedPackRef.current = hasUnsavedPack
 
   useEffect(() => { setSaveFailed(!saveStore(store)) }, [store])
   useEffect(() => { window.scrollTo({ top: 0, behavior: 'instant' }) }, [view])
   useEffect(() => stopSpeaking, [])
+  useEffect(() => {
+    window.history.replaceState({ spellTrailView: view }, '', urlForView(view))
+    function onPopState(event) {
+      const requested = event.state?.spellTrailView || viewFromLocation()
+      const next = ['game', 'complete'].includes(requested) ? 'home' : requested
+      if (next !== requested) window.history.replaceState({ spellTrailView: next }, '', urlForView(next))
+      const leavingTrail = viewRef.current === 'game' && gameStartedRef.current && next !== 'complete'
+      const losingDraft = viewRef.current === 'family' && unsavedPackRef.current && next !== 'family'
+      if ((leavingTrail && !window.confirm('Leave this trail? Your completed answers are saved, but this trail will end.'))
+        || (losingDraft && !window.confirm('Leave without saving this spelling list?'))) {
+        window.history.pushState({ spellTrailView: viewRef.current }, '', urlForView(viewRef.current))
+        return
+      }
+      stopSpeaking()
+      setGameStarted(false)
+      setView(next)
+    }
+    window.addEventListener('popstate', onPopState)
+    return () => window.removeEventListener('popstate', onPopState)
+  }, [])
+  useEffect(() => {
+    if (!gameStarted && !hasUnsavedPack) return undefined
+    function warnBeforeUnload(event) {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', warnBeforeUnload)
+    return () => window.removeEventListener('beforeunload', warnBeforeUnload)
+  }, [gameStarted, hasUnsavedPack])
+
+  function navigate(next, { force = false, replace = false } = {}) {
+    if (next === view) return true
+    if (!force && view === 'game' && gameStarted && next !== 'complete'
+      && !window.confirm('Leave this trail? Your completed answers are saved, but this trail will end.')) return false
+    if (!force && view === 'family' && hasUnsavedPack && next !== 'family'
+      && !window.confirm('Leave without saving this spelling list?')) return false
+    window.history[replace ? 'replaceState' : 'pushState']({ spellTrailView: next }, '', urlForView(next))
+    setView(next)
+    if (next !== 'game') setGameStarted(false)
+    return true
+  }
 
   function setProgress(progress) {
     setStore((current) => updateProfile(current, current.activeId, (entry) => ({ ...entry, progress })))
@@ -1087,27 +1227,27 @@ export default function App() {
     setProgress(settled)
     setNewBadges(BADGES.filter((badge) => settled.badges.includes(badge.id) && !before.has(badge.id)))
     setSummary(roundSummary)
-    setView('complete')
+    navigate('complete', { force: true, replace: true })
     if (levelUps.length) setLevelUps(levelUps)
   }
 
   function leaveGame(nextView) {
+    if (!navigate(nextView, { replace: view === 'game' })) return
     stopSpeaking()
-    setView(nextView)
   }
 
   function switchProfile(id) {
+    if (!navigate('home')) return
     stopSpeaking()
     setStore((current) => ({ ...current, activeId: id }))
     setSelection({ kind: 'tier', id: DEFAULT_TIER_ID })
-    setView('home')
   }
 
   return (
     <div className="app">
+      <a className="skip-link" href="#main-content">Skip to main content</a>
       <Header
         profile={profile}
-        view={view}
         onHome={() => leaveGame('home')}
         onSwitch={() => leaveGame('family')}
       />
@@ -1118,9 +1258,9 @@ export default function App() {
           source={source}
           review={review}
           onSelect={setSelection}
-          onStart={() => setView('game')}
-          onShowRewards={() => setView('rewards')}
-          onShowFamily={() => setView('family')}
+          onStart={() => { setGameStarted(false); navigate('game', { force: true }) }}
+          onShowRewards={() => navigate('rewards')}
+          onShowFamily={() => navigate('family')}
         />
       ) : null}
       {view === 'game' ? (
@@ -1132,18 +1272,19 @@ export default function App() {
           onComplete={completeRound}
           onExit={() => leaveGame('home')}
           onLevelUp={setLevelUps}
+          onStarted={() => setGameStarted(true)}
           audio={audio}
           voiceUri={store.settings?.voiceUri || null}
         />
       ) : null}
       {view === 'complete' && summary ? (
-        <Complete summary={summary} progress={profile.progress} newBadges={newBadges} onHome={() => setView('home')} onReplay={() => setView('game')} />
+        <Complete summary={summary} progress={profile.progress} newBadges={newBadges} canReplay={summary.sourceKind !== 'review' || review.length > 0} onHome={() => navigate('home')} onReplay={() => { setGameStarted(false); navigate('game', { force: true }) }} />
       ) : null}
-      {view === 'privacy' ? <Privacy onBack={() => setView('home')} /> : null}
+      {view === 'privacy' ? <Privacy onBack={() => navigate('home')} /> : null}
       {view === 'rewards' ? (
         <Rewards
           profile={profile}
-          onBack={() => setView('home')}
+          onBack={() => navigate('home')}
           onBuy={(id) => setStore((current) => updateProfile(current, current.activeId, (entry) => buyCompanion(entry, id).profile))}
           onEquip={(id) => setStore((current) => updateProfile(current, current.activeId, (entry) => equipCompanion(entry, id)))}
         />
@@ -1153,7 +1294,7 @@ export default function App() {
           store={store}
           profile={profile}
           audio={audio}
-          onBack={() => setView('home')}
+          onBack={() => navigate('home')}
           onSwitch={switchProfile}
           onAddProfile={(name) => setStore((current) => addProfile(current, name))}
           onRemoveProfile={(id) => setStore((current) => removeProfile(current, id))}
@@ -1168,8 +1309,15 @@ export default function App() {
           onSavePack={(id, name, words) => setStore((current) => updatePack(current, current.activeId, id, { name: name.trim().slice(0, 40) || 'This week', words }))}
           onRoundLength={(length) => setStore((current) => setRoundLength(current, current.activeId, length))}
           onVoice={(uri) => setStore((current) => setVoice(current, uri))}
-          onRestoreStore={(changes) => setStore((current) => ({ ...current, ...changes }))}
-          onShowPrivacy={() => setView('privacy')}
+          onRestoreStore={(changes, returnHome = false) => {
+            setStore((current) => ({ ...current, ...changes }))
+            if (returnHome) {
+              setHasUnsavedPack(false)
+              navigate('home', { force: true, replace: true })
+            }
+          }}
+          onShowPrivacy={() => navigate('privacy')}
+          onDraftChange={setHasUnsavedPack}
         />
       ) : null}
       {levelUps.length ? <LevelUpModal levelUps={levelUps} onClose={() => setLevelUps([])} /> : null}
@@ -1181,8 +1329,8 @@ export default function App() {
             A <b>Wishful Coders</b> app
           </a>
           <span>{saveFailed ? 'Progress cannot be saved in this browser window.' : 'Spell Trail saves progress on this device.'}</span>
-          <button type="button" onClick={() => setView('family')}>Players & word lists</button>
-          <button type="button" onClick={() => setView('privacy')}>Privacy</button>
+          <button type="button" onClick={() => navigate('family')}>Players & word lists</button>
+          <button type="button" onClick={() => navigate('privacy')}>Privacy</button>
           <a className="footer-heart" href={SUPPORT_URL} target="_blank" rel="noopener noreferrer">
             <span aria-hidden="true">♥</span> Support the developer
           </a>

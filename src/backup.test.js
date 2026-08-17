@@ -40,6 +40,13 @@ describe('backup payload', () => {
     expect(restored.activeId).toBe(store.activeId)
   })
 
+  it('normalizes older profile shapes before they enter the app', () => {
+    const restored = unpackStore(JSON.stringify({ activeId: 'missing', profiles: [{ id: 'ada', name: 'Ada' }] }))
+    expect(restored.activeId).toBe('ada')
+    expect(restored.profiles[0].progress.mastered).toEqual({})
+    expect(restored.profiles[0].packs).toEqual([])
+  })
+
   it('refuses a payload with no players rather than wiping the device', () => {
     expect(() => unpackStore(JSON.stringify({ profiles: [] }))).toThrow(/did not contain/)
     expect(() => unpackStore('{}')).toThrow(/did not contain/)

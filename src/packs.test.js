@@ -13,6 +13,7 @@ import {
   loadStore,
   removeProfile,
   renameProfile,
+  saveStore,
   updateProfile,
 } from './profiles.js'
 import {
@@ -193,6 +194,13 @@ describe('profile store', () => {
   it('recovers from corrupt profile storage', () => {
     const store = loadStore(memoryStorage({ [PROFILE_STORAGE_KEY]: '{not json' }))
     expect(store.profiles).toHaveLength(1)
+  })
+
+  it('keeps the backup code across a save and reload', () => {
+    const storage = memoryStorage()
+    const original = { ...emptyStore(), backupCode: 'otter-summit-ridge-4821' }
+    saveStore(original, storage)
+    expect(loadStore(storage).backupCode).toBe('otter-summit-ridge-4821')
   })
 
   it('rebuilds missing fields on a saved profile', () => {

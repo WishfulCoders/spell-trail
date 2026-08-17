@@ -86,6 +86,27 @@ function normalizeSettings(raw) {
   return { ...DEFAULT_SETTINGS, voiceUri: typeof raw.voiceUri === 'string' ? raw.voiceUri : null }
 }
 
+function normalizeBackupCode(raw) {
+  const code = String(raw || '').trim().toLowerCase()
+  return /^[a-z]+-[a-z]+-[a-z]+-\d{4}$/.test(code) ? code : null
+}
+
+// Local saves and downloaded backups pass through the same boundary. Keeping
+// normalization in one place prevents a valid but older backup from entering
+// live React state with fields the current UI cannot safely read.
+export function normalizeStore(raw) {
+  if (!raw || typeof raw !== 'object' || !Array.isArray(raw.profiles)) return null
+  const profiles = raw.profiles.map(normalizeProfile).filter(Boolean).slice(0, MAX_PROFILES)
+  if (!profiles.length) return null
+  const activeId = profiles.some((profile) => profile.id === raw.activeId) ? raw.activeId : profiles[0].id
+  return {
+    activeId,
+    profiles,
+    settings: normalizeSettings(raw.settings),
+    backupCode: normalizeBackupCode(raw.backupCode),
+  }
+}
+
 export function setRoundLength(store, id, length) {
   return updateProfile(store, id, (profile) => ({ ...profile, roundLength: clampRoundLength(length) }))
 }
@@ -105,7 +126,7 @@ export function renameProfile(store, id, name) {
 
 export function emptyStore() {
   const first = createProfile('', 0)
-  return { activeId: first.id, profiles: [first], settings: { ...DEFAULT_SETTINGS } }
+  return { activeId: first.id, profiles: [first], settings: { ...DEFAULT_SETTINGS }, backupCode: null }
 }
 
 // A player who used the single-profile version keeps everything: their save
@@ -117,7 +138,7 @@ function migrateLegacy(storage) {
     const progress = normalizeProgress(JSON.parse(legacy))
     if (!progress.wordsPracticed && !progress.xp) return null
     const profile = { ...createProfile('', 0), progress }
-    return { activeId: profile.id, profiles: [profile], settings: { ...DEFAULT_SETTINGS } }
+    return { activeId: profile.id, profiles: [profile], settings: { ...DEFAULT_SETTINGS }, backupCode: null }
   } catch {
     return null
   }
@@ -126,13 +147,8 @@ function migrateLegacy(storage) {
 export function loadStore(storage = localStorage) {
   try {
     const saved = JSON.parse(storage.getItem(PROFILE_STORAGE_KEY))
-    if (saved && Array.isArray(saved.profiles) && saved.profiles.length) {
-      const profiles = saved.profiles.map(normalizeProfile).filter(Boolean).slice(0, MAX_PROFILES)
-      if (profiles.length) {
-        const activeId = profiles.some((profile) => profile.id === saved.activeId) ? saved.activeId : profiles[0].id
-        return { activeId, profiles, settings: normalizeSettings(saved.settings) }
-      }
-    }
+    const normalized = normalizeStore(saved)
+    if (normalized) return normalized
   } catch {
     // fall through to migration / empty store
   }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { blankFor, shuffle } from './game.js'
 
 // Each question component takes the same props:
@@ -125,8 +125,12 @@ export function ChunkQuestion({ item, onAnswer, feedback }) {
 // phone quietly offers the answer above the keys.
 function SpellingInput({ id, label, placeholder, item, onAnswer, feedback }) {
   const [value, setValue] = useState('')
+  const inputRef = useRef(null)
   const disabled = Boolean(feedback)
   const state = feedback ? (feedback.isCorrect ? 'is-correct' : 'is-wrong') : ''
+  useEffect(() => {
+    if (window.matchMedia('(min-width: 700px) and (pointer: fine)').matches) inputRef.current?.focus()
+  }, [])
   return (
     <form
       className="type-form"
@@ -142,6 +146,8 @@ function SpellingInput({ id, label, placeholder, item, onAnswer, feedback }) {
           `spellcheck=false` into the Android IME's no-suggestions flag. */}
       <input
         id={id}
+        ref={inputRef}
+        name={id}
         className={state}
         autoComplete="off"
         autoCorrect="off"
@@ -154,7 +160,6 @@ function SpellingInput({ id, label, placeholder, item, onAnswer, feedback }) {
         disabled={disabled}
         onChange={(event) => setValue(event.target.value)}
         placeholder={placeholder}
-        autoFocus
       />
       <button className="check-button" type="submit" disabled={disabled || !value.trim()}>
         Check my spelling
@@ -202,6 +207,7 @@ export function MemoryQuestion({ item, onAnswer, feedback }) {
     return (
       <div className="memory-flash">
         <p className="memory-word">{item.word}</p>
+        <p className="memory-hint">It will hide automatically, or hide it when you are ready.</p>
         <div className="memory-timer" aria-hidden="true">
           <i style={{ animationDuration: `${hold}ms` }} />
         </div>

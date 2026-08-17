@@ -1,4 +1,5 @@
 import { normalizeCode as canonicalCode, isValidCode } from '../worker/index.js'
+import { normalizeStore } from './profiles.js'
 
 export { isValidCode }
 
@@ -14,10 +15,15 @@ export function packStore(store) {
 
 export function unpackStore(payload) {
   const parsed = JSON.parse(payload)
-  if (!parsed || !Array.isArray(parsed.profiles) || !parsed.profiles.length) {
+  const normalized = normalizeStore(parsed)
+  if (!normalized) {
     throw new Error('That backup did not contain any players.')
   }
-  return { activeId: parsed.activeId, profiles: parsed.profiles }
+  return {
+    activeId: normalized.activeId,
+    profiles: normalized.profiles,
+    savedAt: Number(parsed.savedAt) || null,
+  }
 }
 
 async function readError(response) {

@@ -37,7 +37,7 @@ export function clampRoundLength(value) {
 export const DEFAULT_WORD_STAT = Object.freeze({
   right: 0,
   tries: 0,
-  // Clean answers since the last miss. This is what retires a word from review
+  // Whole-word recall answers since the last miss. This is what retires a word from review
   // camp, and it is why the total `right` count cannot do that job: a word can
   // be right ten times and still have been missed this morning.
   sinceWrong: 0,
@@ -163,7 +163,7 @@ export function passedCount(progress, words) {
 
 /* ---------------------------------------------------------- review camp -- */
 
-// Clean answers needed to walk a word back out of review camp. One is not
+// Whole-word recall answers needed to walk a word back out of review camp. One is not
 // enough: a lucky guess on a three-option question should not clear a word the
 // child could not spell yesterday.
 export const REVIEW_CLEAR = 2
@@ -175,7 +175,7 @@ export function needsReview(progress, word) {
 }
 
 // Every word the player has missed and not yet walked back, neediest first:
-// fewest clean answers since the miss, then the most recent mistake. Callers
+// fewest recall answers since the miss, then the most recent mistake. Callers
 // pass the pool to search — the tiers plus whatever their grown-up typed in.
 export function reviewWords(progress, words) {
   return words
@@ -365,9 +365,11 @@ export function awardAnswer(progress, word, isCorrect, { mode = null, now = Date
   const stat = {
     right: (previous?.right || 0) + (isCorrect ? 1 : 0),
     tries: (previous?.tries || 0) + 1,
-    // A retry counts here. Getting it right on the second look is exactly the
-    // progress review camp is watching for.
-    sinceWrong: isCorrect ? (previous?.sinceWrong || 0) + 1 : 0,
+    // Review Camp promises spelling, not lucky multiple-choice picks. Only the
+    // two whole-word recall modes move a missed word toward leaving camp.
+    sinceWrong: isCorrect
+      ? (previous?.sinceWrong || 0) + (RECALL_MODES.includes(mode) ? 1 : 0)
+      : 0,
     lastSeen: now,
     lastWrong: isCorrect ? previous?.lastWrong || 0 : now,
     missedModes,

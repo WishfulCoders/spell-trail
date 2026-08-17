@@ -118,7 +118,7 @@ describe('words passed off', () => {
 describe('review camp', () => {
   const words = [{ word: 'said' }, { word: 'they' }, { word: 'what' }]
   const missed = (progress, word, now) => awardAnswer(progress, word, false, { mode: 'type', now }).progress
-  const right = (progress, word, now) => awardAnswer(progress, word, true, { mode: 'listen', now }).progress
+  const right = (progress, word, now) => awardAnswer(progress, word, true, { mode: 'type', now }).progress
 
   it('is empty for a player who has missed nothing', () => {
     expect(reviewWords(newProgress(), words)).toEqual([])
@@ -139,10 +139,12 @@ describe('review camp', () => {
     expect(needsReview(right(progress, 'said', 9000), 'said')).toBe(false)
   })
 
-  it('lets a correct retry count towards leaving camp', () => {
+  it('only lets a whole-word recall answer count towards leaving camp', () => {
     const first = awardAnswer(newProgress(), 'said', false, { mode: 'type', now: 1000 }).progress
-    const retry = awardAnswer(first, 'said', true, { mode: 'chunks', now: 2000, practice: true }).progress
-    expect(retry.mastered.said.sinceWrong).toBe(1)
+    const choiceRetry = awardAnswer(first, 'said', true, { mode: 'chunks', now: 2000, practice: true }).progress
+    expect(choiceRetry.mastered.said.sinceWrong).toBe(0)
+    const recallRetry = awardAnswer(choiceRetry, 'said', true, { mode: 'memory', now: 3000, practice: true }).progress
+    expect(recallRetry.mastered.said.sinceWrong).toBe(1)
   })
 
   it('sends a word back to camp when it is missed again', () => {
