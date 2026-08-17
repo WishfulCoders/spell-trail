@@ -4,6 +4,34 @@ A calm, local-first spelling game designed around short practice sessions. Quest
 mix listening, recognition, missing-letter, and chunk-building activities, with typing
 checkpoints spaced evenly through each trail.
 
+**Live: https://spelltrail.app**
+
+## Where things stand
+
+| | |
+| --- | --- |
+| Live at | `spelltrail.app`, `www.spelltrail.app`, `spell-trail.wishfulcoders.workers.dev` |
+| Cloudflare account | wishfulcoders@gmail.com (`4fb16a58f8142b7c35c5b55fcc17b033`) |
+| Zone | `spelltrail.app`, active, TLS auto-renewed by Cloudflare |
+| Storage | `BACKUPS` KV (`7b15846d1e874de0b8a787d2d2cb5139`) — optional backups only |
+| Repo | `github.com:jlaw9/spell-trail`, committed directly to `main` |
+
+Shipped: six tiers of 64 words, four question modes, in-session correction, up to six
+player profiles, parent-entered word lists, firefly-bought companions, backup codes,
+per-player session length, voice selection, a levelling curve with a level-up
+celebration, and a privacy page.
+
+Known gaps, in the order worth fixing:
+
+- **`Always Use HTTPS` is off** for the zone, so `http://spelltrail.app` serves over
+  plaintext instead of redirecting. Fix in Cloudflare → SSL/TLS → Edge Certificates. It
+  needs dashboard access; the wrangler token cannot change zone settings.
+- **The backup API has no rate limiting.** Codes have roughly 10^11 combinations so
+  brute force is impractical, but a Cloudflare rate-limiting rule on `/api/backup/*`
+  would close it properly.
+- **Review Camp is unbuilt.** `awardAnswer` already records `lastSeen`, `lastWrong`, and
+  `missedModes` per word, and nothing consumes them yet — that is the intended input.
+
 ## Run it
 
 ```bash
@@ -121,14 +149,25 @@ namespace is bound as `BACKUPS` in `wrangler.jsonc`.
 ## Privacy
 
 `src/App.jsx` has a `Privacy` view linked from the footer and from the backup panel. It is the
-user-facing statement of everything above and should be updated whenever data handling changes —
-including the note that some browsers synthesise speech in the cloud rather than on device.
+user-facing statement of everything above and **must be updated whenever data handling changes**.
+Two things in it are easy to get wrong and worth preserving:
+
+- Some browsers, including Chrome's better voices, synthesise speech in the cloud, so the word
+  and its sentence go to the browser maker. That is disclosed.
+- Cloudflare Web Analytics is disclosed by name. If it is ever switched off, remove that section
+  rather than leaving the page overstating what is collected.
 
 ## Fonts
 
 DM Sans and Manrope are self-hosted from `public/fonts` as latin-subset variable fonts
-(about 60 kB total, one file per family) and preloaded in `index.html`. The app makes no
-third-party requests at runtime.
+(about 60 kB total, one file per family) and preloaded in `index.html`, so no font network
+is involved.
+
+The one third-party request the site makes is the Cloudflare Web Analytics beacon, which
+Cloudflare injects at the edge on the `spelltrail.app` zone (it does not appear on
+`workers.dev`). It is cookieless and does not identify visitors, and the privacy page says
+so explicitly. Turning off Web Analytics auto-install for the zone would remove it — if
+that ever happens, update the privacy page to match.
 
 ## Checks
 

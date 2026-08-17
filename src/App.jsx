@@ -685,12 +685,25 @@ function Privacy({ onBack }) {
           marked as an on-device or local voice in the voice list.
         </p>
 
+        <h2>Counting visitors</h2>
+        <p>
+          Spell Trail uses Cloudflare Web Analytics to count how many people open the site and
+          which pages they land on. It sets no cookies, does not follow you to other sites, and
+          does not build a profile of you or your child. It loads one small script from
+          Cloudflare, which is the only thing this site requests from anywhere else.
+        </p>
+        <p>
+          What it records is the kind of thing a web server writes down anyway: a page address, a
+          rough country, a browser type. It never sees a player name, a score, or a spelling list —
+          those live on your device and are only ever sent if you make a backup.
+        </p>
+
         <h2>What we do not do</h2>
         <ul>
           <li>No accounts, no sign-in, no passwords.</li>
           <li>No advertising, and nothing is ever sold or shared with advertisers.</li>
-          <li>No analytics, no tracking pixels, no third-party scripts.</li>
-          <li>No cookies. Fonts are served from this site, not from a font network.</li>
+          <li>No cookies, and no tracking you across other websites.</li>
+          <li>Fonts are served from this site, not from a font network.</li>
         </ul>
 
         <h2>Children</h2>
