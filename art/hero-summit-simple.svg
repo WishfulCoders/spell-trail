@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 420" width="560" height="420" role="img" aria-labelledby="title desc">
+  <title id="title">A spelling trail climbing to a mountain summit</title>
+  <desc id="desc">A simple mountain landscape with a winding cream trail, three orange checkpoints, and a golden star at the summit.</desc>
+
+  <rect width="560" height="420" fill="#afcfcb"/>
+
+  <circle cx="92" cy="72" r="42" fill="#ffe58e" opacity=".25"/>
+  <circle cx="92" cy="72" r="31" fill="#f4c85a"/>
+
+  <g fill="#f8f5ec" opacity=".82">
+    <rect x="25" y="132" width="92" height="21" rx="11"/>
+    <circle cx="51" cy="132" r="18"/>
+    <circle cx="93" cy="136" r="14"/>
+    <rect x="456" y="92" width="78" height="19" rx="10"/>
+    <circle cx="477" cy="93" r="16"/>
+    <circle cx="512" cy="96" r="12"/>
+  </g>
+
+  <path d="M-45 328 116 174 268 328Z" fill="#8ab09c"/>
+  <path d="M368 328 482 205 596 328Z" fill="#91b5a2"/>
+  <path d="M38 386 370 69 590 386Z" fill="#5f9278"/>
+  <path d="M38 386 370 69 334 256 230 386Z" fill="#72a382"/>
+  <path d="M337 108 370 69 405 112 386 105 372 111 360 102 349 109Z" fill="#e9eee2"/>
+
+  <path d="M-30 356 590 338 590 440-30 440Z" fill="#4f7b68"/>
+
+  <g fill="#315f50" opacity=".82">
+    <path d="M27 364 45 319 63 364Z"/><rect x="42" y="356" width="6" height="32"/>
+    <path d="M484 357 501 315 518 357Z"/><rect x="498" y="350" width="6" height="30"/>
+    <path d="M520 377 537 335 554 377Z"/><rect x="534" y="370" width="6" height="28"/>
+    <path d="M89 382 103 348 117 382Z"/><rect x="100" y="376" width="6" height="25"/>
+  </g>
+
+  <path d="M 0 418 C 80 388 135 370 188 342 C 240 315 290 317 316 288 C 327 274 300 264 269 254 C 222 238 235 206 298 185 C 334 173 352 160 334 151 C 293 130 322 101 360 69 L 380 80 C 350 110 337 123 350 139 C 389 164 369 191 311 204 C 278 212 270 224 282 229 C 331 243 368 263 342 299 C 311 342 244 343 200 364 C 143 394 88 412 16 443 Z" fill="#c7b58d"/>
+  <path d="M 6 424 C 82 394 137 377 191 348 C 239 323 296 323 322 291 C 338 270 305 258 272 247 C 233 234 244 211 301 190 C 342 177 361 160 338 147 C 305 130 329 106 365 72 L 375 80 C 344 104 327 120 346 140 C 378 158 360 184 307 199 C 269 209 257 225 279 235 C 322 249 355 266 335 296 C 306 335 244 337 197 359 C 141 389 86 406 12 436 Z" fill="#eadbb7"/>
+
+  <g>
+    <circle cx="158" cy="372" r="17" fill="#fff5da"/>
+    <circle cx="158" cy="372" r="11" fill="#e56f3d"/>
+    <circle cx="323" cy="298" r="17" fill="#fff5da"/>
+    <circle cx="323" cy="298" r="11" fill="#e56f3d"/>
+    <circle cx="304" cy="194" r="17" fill="#fff5da"/>
+    <circle cx="304" cy="194" r="11" fill="#e56f3d"/>
+  </g>
+
+  <circle cx="370" cy="70" r="27" fill="#fff5da" opacity=".7"/>
+  <circle cx="370" cy="70" r="22" fill="#f1bd4a"/>
+  <path d="m370 56 4 9 10 1-8 7 2 10-8-5-9 5 2-10-7-7 10-1Z" fill="#173f37"/>
+
+  <g fill="#fff0a8">
+    <path d="m191 222 3 7 7 3-7 3-3 7-3-7-7-3 7-3Z"/>
+    <path d="m435 172 4 9 9 4-9 4-4 9-4-9-9-4 9-4Z"/>
+    <path d="m464 369 3 7 7 3-7 3-3 7-3-7-7-3 7-3Z"/>
+  </g>
+</svg>
