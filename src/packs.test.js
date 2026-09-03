@@ -9,11 +9,13 @@ import {
   addProfile,
   createPack,
   createProfile,
+  defaultSelection,
   emptyStore,
   loadStore,
   removeProfile,
   renameProfile,
   saveStore,
+  setLastSelection,
   updateProfile,
 } from './profiles.js'
 import {
@@ -131,7 +133,35 @@ describe('word packs', () => {
   it('handles a pack of words too short to split into chunks', () => {
     const pack = createPack('Short', buildPackWords(['cat', 'dog', 'sun']))
     const round = buildRound({ words: pack.words, length: 3 })
-    expect(round.every((item) => ['listen', 'type'].includes(item.mode))).toBe(true)
+    expect(round.every((item) => ['listen', 'memory', 'type'].includes(item.mode))).toBe(true)
+  })
+})
+
+describe('where a player lands', () => {
+  it('falls back to the default tier for a brand new player', () => {
+    expect(defaultSelection(createProfile('Ada'), 'base-camp')).toEqual({ kind: 'tier', id: 'base-camp' })
+  })
+
+  it('opens on the newest word list before the child has chosen anything', () => {
+    const profile = { ...createProfile('Ada'), packs: [{ ...createPack('Old', []), id: 'old', createdAt: 1 }, { ...createPack('New', []), id: 'new', createdAt: 2 }] }
+    expect(defaultSelection(profile, 'base-camp')).toEqual({ kind: 'pack', id: 'new' })
+  })
+
+  it('remembers the last track chosen', () => {
+    const store = emptyStore()
+    const saved = setLastSelection(store, store.activeId, { kind: 'tier', id: 'high-ridge' })
+    expect(defaultSelection(activeProfile(saved), 'base-camp')).toEqual({ kind: 'tier', id: 'high-ridge' })
+  })
+
+  it('does not send a child back to a word list that has been deleted', () => {
+    const profile = { ...createProfile('Ada'), lastSelection: { kind: 'pack', id: 'gone' }, packs: [] }
+    expect(defaultSelection(profile, 'base-camp')).toEqual({ kind: 'tier', id: 'base-camp' })
+  })
+
+  it('does not remember a pass-off as the track itself', () => {
+    const store = emptyStore()
+    const saved = setLastSelection(store, store.activeId, { kind: 'pack', id: 'week', passOff: true })
+    expect(activeProfile(saved).lastSelection).toEqual({ kind: 'pack', id: 'week' })
   })
 })
 

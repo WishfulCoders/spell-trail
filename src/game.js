@@ -44,6 +44,15 @@ export const DEFAULT_WORD_STAT = Object.freeze({
   lastSeen: 0,
   lastWrong: 0,
   missedModes: {},
+  // Distinct days on which the word was typed correctly from hearing alone,
+  // on a first attempt. Memory trail does not count: the word was on screen a
+  // moment earlier, so it proves holding, not spelling.
+  typedDays: [],
+  // When the word was last typed right in a pass-off trail, or ticked by a
+  // grown-up on a written test. Zero until then, and cleared by any later miss.
+  passedOff: 0,
+  // When a grown-up last ticked it on a written test. Informational.
+  written: 0,
 })
 
 export const DEFAULT_PROGRESS = Object.freeze({
@@ -147,18 +156,100 @@ export function migrateXp(oldXp) {
   return totalXpForLevel(oldLevel) + carried
 }
 
-// A word is passed off once it has been spelled right at least once. Later
-// mistakes never take it back: the count is a record of ground covered, not a
-// running score, so a track's progress bar only ever moves forwards.
-export const PASS_THRESHOLD = 1
+/* -------------------------------------------------------------- mastery -- */
+
+// Every word climbs the same ladder. Getting a supporting question right is
+// not spelling, so it cannot pass a word off; only typing it from the spoken
+// word alone moves the top rungs, and only a pass-off trail (or a grown-up
+// ticking a written test) reaches the last one. A later first-attempt miss
+// knocks the word straight off the top rung again, because "passed off" has
+// to keep meaning "can spell it today".
+export const MASTERY = ['new', 'seen', 'practicing', 'spelled', 'passed']
+
+export function masteryOf(progress, word) {
+  const stat = progress?.mastered?.[word]
+  if (!stat || !(stat.tries > 0)) return 'new'
+  if (stat.passedOff) return 'passed'
+  if ((stat.typedDays || []).length >= 1) return 'spelled'
+  if ((stat.right || 0) > 0) return 'practicing'
+  return 'seen'
+}
+
+export function masteryAtLeast(progress, word, level) {
+  return MASTERY.indexOf(masteryOf(progress, word)) >= MASTERY.indexOf(level)
+}
 
 export function isPassed(progress, word) {
-  return (progress?.mastered?.[word]?.right || 0) >= PASS_THRESHOLD
+  return masteryOf(progress, word) === 'passed'
 }
 
 // `words` is a tier or pack word list — [{ word, ... }].
 export function passedCount(progress, words) {
   return words.reduce((total, entry) => total + (isPassed(progress, entry.word) ? 1 : 0), 0)
+}
+
+export function masteryCounts(progress, words) {
+  const counts = Object.fromEntries(MASTERY.map((level) => [level, 0]))
+  for (const entry of words) counts[masteryOf(progress, entry.word)] += 1
+  return counts
+}
+
+// A list can be passed off once every word on it has been typed right at least
+// once in an ordinary trail. Words already passed do not need to be re-earned.
+export function canPassOff(progress, words) {
+  return words.length > 0 && words.every((entry) => masteryAtLeast(progress, entry.word, 'spelled'))
+}
+
+// The hardest question a word should be asked, given how well the player
+// knows it. A word never met before is only ever recognised or completed; the
+// second meeting can be built from pieces; a word answered right before can be
+// shown then hidden; and only a word answered right twice is typed from sound
+// alone. This is what stops a child's first encounter with a word being a
+// blank text box.
+export function modeCeiling(progress, word) {
+  const stat = progress?.mastered?.[word]
+  const right = stat?.right || 0
+  if (!stat || !(stat.tries > 0)) return 'missing'
+  if (right === 0) return 'chunks'
+  if (right === 1) return 'memory'
+  return 'type'
+}
+
+export function capMode(wanted, ceiling) {
+  return MODE_DIFFICULTY.indexOf(wanted) > MODE_DIFFICULTY.indexOf(ceiling) ? ceiling : wanted
+}
+
+const DAY_MS = 86_400_000
+export function dayOf(now) {
+  return Math.floor(now / DAY_MS)
+}
+
+// A grown-up marking the written test. Ticked means the word is passed off
+// and leaves review camp; unticked means it was misspelled on paper, which is
+// a miss like any other and sends it back to camp.
+export function markWritten(progress, word, passed, { now = Date.now() } = {}) {
+  const previous = progress.mastered[word] || DEFAULT_WORD_STAT
+  const stat = passed
+    ? {
+      ...previous,
+      passedOff: now,
+      written: now,
+      sinceWrong: Math.max(previous.sinceWrong || 0, REVIEW_CLEAR),
+      lastSeen: now,
+      tries: (previous.tries || 0) + 1,
+      right: (previous.right || 0) + 1,
+    }
+    : {
+      ...previous,
+      passedOff: 0,
+      written: 0,
+      sinceWrong: 0,
+      lastWrong: now,
+      lastSeen: now,
+      tries: (previous.tries || 0) + 1,
+      missedModes: { ...(previous.missedModes || {}), written: ((previous.missedModes || {}).written || 0) + 1 },
+    }
+  return { ...progress, mastered: { ...progress.mastered, [word]: stat } }
 }
 
 /* ---------------------------------------------------------- review camp -- */
@@ -272,14 +363,22 @@ export function makeRetry(item, { audio = true } = {}) {
 // in two different ways rather than twice the same way.
 export const RECALL_MODES = ['type', 'memory']
 
-// Recall checkpoints land at evenly spaced positions, ending on the last
-// question. At length 8 that is indices 3 and 7; at length 3 it is index 2.
+// Recall checkpoints land at roughly evenly spaced positions, ending on the
+// last question. At length 8 the anchors are indices 3 and 7; each one except
+// the last may drift a slot either way so two trails do not feel identical,
+// and the two recall modes are dealt in a random order rather than always
+// typing first.
 export function planModes(length, random = Math.random, { recallShare = RECALL_SHARE } = {}) {
   if (length <= 0) return []
   const checkpoints = Math.min(length, Math.max(1, Math.round(length * recallShare)))
+  const recall = shuffle(RECALL_MODES, random)
   const checkpointAt = new Map()
   for (let slot = 1; slot <= checkpoints; slot += 1) {
-    checkpointAt.set(Math.round((slot * length) / checkpoints) - 1, RECALL_MODES[(slot - 1) % RECALL_MODES.length])
+    const anchor = Math.round((slot * length) / checkpoints) - 1
+    const drift = slot === checkpoints ? 0 : Math.floor(random() * 3) - 1
+    let index = Math.min(length - 1, Math.max(0, anchor + drift))
+    while (checkpointAt.has(index) && index < length - 1) index += 1
+    checkpointAt.set(index, recall[(slot - 1) % recall.length])
   }
   const cycle = shuffle(['listen', 'missing', 'chunks'], random)
   const plan = []
@@ -295,15 +394,60 @@ export function planModes(length, random = Math.random, { recallShare = RECALL_S
   return plan
 }
 
+// Ordering for a tier trail. Up to half the trail is revision: words the
+// player has met but not passed off, longest-unseen first, so a word does not
+// vanish into a pool of sixty-four for a month. The rest is new ground. Words
+// already passed off are only drawn when nothing else is left.
+function orderByNeed(shuffled, wanted, progress) {
+  const revision = shuffled
+    .filter((entry) => !['new', 'passed'].includes(masteryOf(progress, entry.word)))
+    .sort((left, right) => (progress.mastered[left.word]?.lastSeen || 0) - (progress.mastered[right.word]?.lastSeen || 0))
+  const fresh = shuffled.filter((entry) => masteryOf(progress, entry.word) === 'new')
+  const passed = shuffled.filter((entry) => masteryOf(progress, entry.word) === 'passed')
+  const revisionShare = Math.ceil(wanted / 2)
+  return [...revision.slice(0, revisionShare), ...fresh, ...revision.slice(revisionShare), ...passed]
+}
+
 // Word selection, round length, and mode assignment are independent inputs so
 // a round can be built from a tier, a review queue, a daily seed, or a custom
 // word pack without changing anything below this line.
-export function buildRound({ words, length, random = Math.random, audio = true, recallShare = RECALL_SHARE }) {
-  const pool = shuffle(words, random)
-  const wanted = length == null ? pool.length : Math.min(length, pool.length)
+//
+// `progress` lets the round respect each word's ceiling (see `modeCeiling`)
+// and hand the recall checkpoints to words that are ready for them. Without
+// it every word is treated as fully known, which is what the tests want.
+// `passOff` builds the pass-off trail: every word, typed from sound alone.
+export function buildRound({
+  words, length, random = Math.random, audio = true, recallShare = RECALL_SHARE, progress = null, passOff = false, priority = false,
+}) {
+  if (passOff) {
+    return shuffle(words, random).map((entry) => ({ ...entry, mode: resolveMode(entry, 'type', { audio }), passOff: true }))
+  }
+  const shuffled = shuffle(words, random)
+  const wanted = length == null ? shuffled.length : Math.min(length, shuffled.length)
+  // Take the front of a list that arrives already ordered by need, otherwise
+  // sample with a bias towards words the player has not passed off yet.
+  const pool = priority ? words : (progress ? orderByNeed(shuffled, wanted, progress) : shuffled)
   const picked = pool.slice(0, Math.max(0, wanted))
   const plan = planModes(picked.length, random, { recallShare })
-  return picked.map((entry, index) => ({ ...entry, mode: resolveMode(entry, plan[index], { audio }) }))
+  if (!progress) return picked.map((entry, index) => ({ ...entry, mode: resolveMode(entry, plan[index], { audio }) }))
+
+  // Give recall slots to the words that can take them: a checkpoint asked of a
+  // word the child met thirty seconds ago would be capped down to a supporting
+  // question anyway, so swap in a word that is ready to be typed.
+  const ready = picked.filter((entry) => capMode('type', modeCeiling(progress, entry.word)) === 'type')
+  const rest = picked.filter((entry) => !ready.includes(entry))
+  const arranged = new Array(picked.length)
+  plan.forEach((mode, index) => {
+    if (RECALL_MODES.includes(mode) && ready.length) arranged[index] = ready.shift()
+  })
+  const leftovers = shuffle([...ready, ...rest], random)
+  for (let index = 0; index < arranged.length; index += 1) {
+    if (!arranged[index]) arranged[index] = leftovers.shift()
+  }
+  return arranged.map((entry, index) => ({
+    ...entry,
+    mode: resolveMode(entry, capMode(plan[index], modeCeiling(progress, entry.word)), { audio }),
+  }))
 }
 
 /* --------------------------------------------------------------- blanks -- */
@@ -356,11 +500,20 @@ export function blankSentence(sentence, word) {
 // updates that word's record, but it does not touch the streak or the accuracy
 // counters — those describe first attempts, and a retry should never feel like
 // a way to inflate them or a way to lose a streak twice for one mistake.
-export function awardAnswer(progress, word, isCorrect, { mode = null, now = Date.now(), practice = false } = {}) {
+//
+// `unknown` marks an "I don't know" — a fair thing to ask for, but not an
+// attempt, so it earns nothing. Otherwise tapping it eight times would be the
+// quickest trail in the app.
+//
+// `passOff` marks an answer inside a pass-off trail: a correct one stamps the
+// word as passed off. Any first-attempt miss, in any mode, clears that stamp.
+export function awardAnswer(progress, word, isCorrect, {
+  mode = null, now = Date.now(), practice = false, unknown = false, passOff = false,
+} = {}) {
   const streak = practice ? progress.streak : (isCorrect ? progress.streak + 1 : 0)
   const xpEarned = practice
     ? (isCorrect ? PRACTICE_XP : 0)
-    : (isCorrect ? CORRECT_XP + Math.min(streak, STREAK_BONUS_CAP) : PARTICIPATION_XP)
+    : (isCorrect ? CORRECT_XP + Math.min(streak, STREAK_BONUS_CAP) : (unknown ? 0 : PARTICIPATION_XP))
   const firefliesEarned = practice
     ? (isCorrect ? 1 : 0)
     : (isCorrect ? (streak >= STREAK_FIREFLY_BONUS_AT ? 2 : 1) : 0)
@@ -368,6 +521,9 @@ export function awardAnswer(progress, word, isCorrect, { mode = null, now = Date
   const previous = progress.mastered[word]
   const missedModes = { ...(previous?.missedModes || {}) }
   if (!isCorrect && mode) missedModes[mode] = (missedModes[mode] || 0) + 1
+
+  const typedDays = [...(previous?.typedDays || [])]
+  if (isCorrect && !practice && mode === 'type' && !typedDays.includes(dayOf(now))) typedDays.push(dayOf(now))
 
   const stat = {
     right: (previous?.right || 0) + (isCorrect ? 1 : 0),
@@ -380,6 +536,9 @@ export function awardAnswer(progress, word, isCorrect, { mode = null, now = Date
     lastSeen: now,
     lastWrong: isCorrect ? previous?.lastWrong || 0 : now,
     missedModes,
+    typedDays: typedDays.slice(-10),
+    passedOff: isCorrect ? (passOff && mode === 'type' ? now : previous?.passedOff || 0) : (practice ? previous?.passedOff || 0 : 0),
+    written: isCorrect || practice ? previous?.written || 0 : 0,
   }
 
   return {
@@ -414,7 +573,12 @@ function normalizeMastered(raw) {
   if (!raw || typeof raw !== 'object') return out
   for (const [word, stat] of Object.entries(raw)) {
     if (!stat || typeof stat !== 'object') continue
-    out[word] = { ...DEFAULT_WORD_STAT, ...stat, missedModes: { ...(stat.missedModes || {}) } }
+    out[word] = {
+      ...DEFAULT_WORD_STAT,
+      ...stat,
+      missedModes: { ...(stat.missedModes || {}) },
+      typedDays: Array.isArray(stat.typedDays) ? stat.typedDays.filter(Number.isFinite) : [],
+    }
   }
   return out
 }

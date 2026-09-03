@@ -11,6 +11,11 @@ import {
   XP_CURVE_VERSION,
   awardAnswer,
   blankFor,
+  canPassOff,
+  capMode,
+  markWritten,
+  masteryOf,
+  modeCeiling,
   blankSentence,
   buildRound,
   easierMode,
@@ -88,32 +93,138 @@ describe('progress', () => {
   })
 })
 
-describe('words passed off', () => {
+describe('mastery ladder', () => {
   const words = [{ word: 'said' }, { word: 'they' }, { word: 'what' }]
+  const DAY = 86_400_000
 
   it('counts nothing on a fresh profile', () => {
     expect(passedCount(newProgress(), words)).toBe(0)
+    expect(masteryOf(newProgress(), 'said')).toBe('new')
   })
 
-  it('counts a word once it has been spelled right', () => {
-    const progress = awardAnswer(newProgress(), 'said', true).progress
-    expect(passedCount(progress, words)).toBe(1)
-  })
-
-  it('does not count a word that has only been missed', () => {
-    const progress = awardAnswer(newProgress(), 'said', false).progress
+  it('does not pass a word off for a multiple-choice answer', () => {
+    const progress = awardAnswer(newProgress(), 'said', true, { mode: 'listen' }).progress
+    expect(masteryOf(progress, 'said')).toBe('practicing')
     expect(passedCount(progress, words)).toBe(0)
   })
 
-  it('never takes a passed word back after a later mistake', () => {
-    const right = awardAnswer(newProgress(), 'said', true).progress
-    const thenWrong = awardAnswer(right, 'said', false).progress
-    expect(passedCount(thenWrong, words)).toBe(1)
+  it('calls a word spelled once it has been typed from sound alone', () => {
+    const progress = awardAnswer(newProgress(), 'said', true, { mode: 'type' }).progress
+    expect(masteryOf(progress, 'said')).toBe('spelled')
+    expect(passedCount(progress, words)).toBe(0)
+  })
+
+  it('does not let memory trail count as spelling', () => {
+    const progress = awardAnswer(newProgress(), 'said', true, { mode: 'memory' }).progress
+    expect(masteryOf(progress, 'said')).toBe('practicing')
+  })
+
+  it('does not let a second look count as spelling', () => {
+    const progress = awardAnswer(newProgress(), 'said', true, { mode: 'type', practice: true }).progress
+    expect(masteryOf(progress, 'said')).toBe('practicing')
+  })
+
+  it('records each distinct day a word was typed right', () => {
+    const one = awardAnswer(newProgress(), 'said', true, { mode: 'type', now: DAY * 10 }).progress
+    const same = awardAnswer(one, 'said', true, { mode: 'type', now: DAY * 10 + 1000 }).progress
+    const later = awardAnswer(same, 'said', true, { mode: 'type', now: DAY * 12 }).progress
+    expect(later.mastered.said.typedDays).toEqual([10, 12])
+  })
+
+  it('passes a word off only when typed right in a pass-off trail', () => {
+    const spelled = awardAnswer(newProgress(), 'said', true, { mode: 'type' }).progress
+    const passed = awardAnswer(spelled, 'said', true, { mode: 'type', passOff: true, now: 5000 }).progress
+    expect(masteryOf(passed, 'said')).toBe('passed')
+    expect(passedCount(passed, words)).toBe(1)
+  })
+
+  it('takes a passed word back after a later first-attempt mistake', () => {
+    const passed = awardAnswer(newProgress(), 'said', true, { mode: 'type', passOff: true }).progress
+    const thenWrong = awardAnswer(passed, 'said', false, { mode: 'listen' }).progress
+    expect(passedCount(thenWrong, words)).toBe(0)
+    expect(needsReview(thenWrong, 'said')).toBe(true)
+  })
+
+  it('unlocks the pass-off trail once every word has been spelled', () => {
+    let progress = newProgress()
+    expect(canPassOff(progress, words)).toBe(false)
+    for (const entry of words) progress = awardAnswer(progress, entry.word, true, { mode: 'chunks' }).progress
+    expect(canPassOff(progress, words)).toBe(false)
+    for (const entry of words) progress = awardAnswer(progress, entry.word, true, { mode: 'type' }).progress
+    expect(canPassOff(progress, words)).toBe(true)
+  })
+
+  it('lets a grown-up pass a word off from a written test, and send it back', () => {
+    const ticked = markWritten(newProgress(), 'said', true, { now: 7000 })
+    expect(masteryOf(ticked, 'said')).toBe('passed')
+    expect(needsReview(ticked, 'said')).toBe(false)
+    const crossed = markWritten(ticked, 'said', false, { now: 8000 })
+    expect(masteryOf(crossed, 'said')).not.toBe('passed')
+    expect(needsReview(crossed, 'said')).toBe(true)
+    expect(crossed.mastered.said.missedModes.written).toBe(1)
+  })
+
+  it('pays nothing for an "I don\'t know"', () => {
+    const { xpEarned, firefliesEarned } = awardAnswer(newProgress(), 'said', false, { mode: 'type', unknown: true })
+    expect(xpEarned).toBe(0)
+    expect(firefliesEarned).toBe(0)
   })
 
   it('ignores words from other trails', () => {
-    const progress = awardAnswer(newProgress(), 'expedition', true).progress
+    const progress = awardAnswer(newProgress(), 'expedition', true, { mode: 'type', passOff: true }).progress
     expect(passedCount(progress, words)).toBe(0)
+  })
+})
+
+describe('mode ceilings', () => {
+  it('never asks a brand-new word to be typed', () => {
+    expect(modeCeiling(newProgress(), 'said')).toBe('missing')
+    expect(capMode('type', 'missing')).toBe('missing')
+    expect(capMode('listen', 'missing')).toBe('listen')
+  })
+
+  it('opens up one rung at a time', () => {
+    const seen = awardAnswer(newProgress(), 'said', false, { mode: 'listen' }).progress
+    expect(modeCeiling(seen, 'said')).toBe('chunks')
+    const once = awardAnswer(seen, 'said', true, { mode: 'chunks' }).progress
+    expect(modeCeiling(once, 'said')).toBe('memory')
+    const twice = awardAnswer(once, 'said', true, { mode: 'memory' }).progress
+    expect(modeCeiling(twice, 'said')).toBe('type')
+  })
+
+  it('caps a fresh trail below recall when the player knows none of the words', () => {
+    const round = buildRound({ words: WORD_TIERS[0].words, length: ROUND_LENGTH, progress: newProgress() })
+    expect(round.every((item) => ['listen', 'missing'].includes(item.mode))).toBe(true)
+  })
+
+  it('hands the recall checkpoints to the words that are ready for them', () => {
+    let progress = newProgress()
+    const known = WORD_TIERS[0].words.slice(0, 2)
+    for (const entry of known) {
+      progress = awardAnswer(progress, entry.word, true, { mode: 'chunks' }).progress
+      progress = awardAnswer(progress, entry.word, true, { mode: 'memory' }).progress
+    }
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const round = buildRound({ words: WORD_TIERS[0].words, length: ROUND_LENGTH, progress })
+      const recall = round.filter((item) => RECALL_MODES.includes(item.mode))
+      expect(recall).toHaveLength(2)
+      expect(recall.map((item) => item.word).sort()).toEqual(known.map((entry) => entry.word).sort())
+    }
+  })
+
+  it('draws words the player has not passed off before ones they have', () => {
+    let progress = newProgress()
+    const passed = WORD_TIERS[0].words.slice(0, 60)
+    for (const entry of passed) progress = awardAnswer(progress, entry.word, true, { mode: 'type', passOff: true }).progress
+    const round = buildRound({ words: WORD_TIERS[0].words, length: 4, progress })
+    const passedWords = new Set(passed.map((entry) => entry.word))
+    expect(round.every((item) => !passedWords.has(item.word))).toBe(true)
+  })
+
+  it('builds a pass-off trail that types every word', () => {
+    const round = buildRound({ words: WORD_TIERS[0].words.slice(0, 5), passOff: true })
+    expect(round).toHaveLength(5)
+    expect(round.every((item) => item.mode === 'type' && item.passOff)).toBe(true)
   })
 })
 
@@ -219,7 +330,7 @@ describe('storage', () => {
   it('backfills fields missing from an older saved profile', () => {
     const saved = JSON.stringify({ xp: 50, mastered: { friend: { right: 1, tries: 2 } } })
     const loaded = loadProgress(fakeStorage(saved))
-    expect(loaded.mastered.friend).toEqual({ right: 1, tries: 2, sinceWrong: 0, lastSeen: 0, lastWrong: 0, missedModes: {} })
+    expect(loaded.mastered.friend).toEqual({ right: 1, tries: 2, sinceWrong: 0, lastSeen: 0, lastWrong: 0, missedModes: {}, typedDays: [], passedOff: 0, written: 0 })
     expect(loaded.badges).toEqual([])
   })
 
@@ -240,6 +351,17 @@ describe('round building', () => {
     const plan = planModes(3, () => 0.5)
     expect(plan).toHaveLength(3)
     expect(plan.filter((mode) => RECALL_MODES.includes(mode))).toHaveLength(1)
+  })
+
+  it('always ends on a recall checkpoint but lets the earlier ones drift', () => {
+    const seen = new Set()
+    for (let attempt = 0; attempt < 60; attempt += 1) {
+      const plan = planModes(ROUND_LENGTH)
+      expect(RECALL_MODES.includes(plan[ROUND_LENGTH - 1])).toBe(true)
+      expect(plan.filter((mode) => RECALL_MODES.includes(mode))).toHaveLength(2)
+      seen.add(plan.findIndex((mode) => RECALL_MODES.includes(mode)))
+    }
+    expect(seen.size).toBeGreaterThan(1)
   })
 
   it('gives a device with no speech a memory checkpoint instead of a typed one', () => {

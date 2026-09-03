@@ -35,6 +35,9 @@ export function createProfile(name, index = 0) {
     packs: [],
     unlocked: [],
     roundLength: ROUND_LENGTH,
+    // The trail this player last chose, so the app opens on their school list
+    // rather than Base Camp every time. Null means "pick a sensible default".
+    lastSelection: null,
   }
 }
 
@@ -76,7 +79,29 @@ function normalizeProfile(raw, index) {
       ? [...new Set(raw.unlocked.filter((id) => companionById(id)))]
       : [],
     roundLength: clampRoundLength(raw.roundLength),
+    lastSelection: normalizeSelection(raw.lastSelection),
   }
+}
+
+function normalizeSelection(raw) {
+  if (!raw || typeof raw !== 'object') return null
+  if (!['tier', 'pack', 'review'].includes(raw.kind)) return null
+  return { kind: raw.kind, id: typeof raw.id === 'string' ? raw.id : null }
+}
+
+export function setLastSelection(store, id, selection) {
+  return updateProfile(store, id, (profile) => ({ ...profile, lastSelection: normalizeSelection(selection) }))
+}
+
+// Where a player lands: whatever they chose last if it still exists,
+// otherwise their newest word list, otherwise the default tier.
+export function defaultSelection(profile, defaultTierId) {
+  const last = profile.lastSelection
+  if (last?.kind === 'pack' && profile.packs.some((pack) => pack.id === last.id)) return last
+  if (last?.kind === 'tier' && last.id) return last
+  const newest = [...profile.packs].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))[0]
+  if (newest) return { kind: 'pack', id: newest.id }
+  return { kind: 'tier', id: defaultTierId }
 }
 
 export const DEFAULT_SETTINGS = Object.freeze({ voiceUri: null })

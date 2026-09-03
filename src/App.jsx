@@ -7,10 +7,14 @@ import {
   awardAnswer,
   blankSentence,
   buildRound,
+  canPassOff,
   finishSession,
   levelFromXp,
   levelProgress,
   makeRetry,
+  markWritten,
+  masteryCounts,
+  masteryOf,
   newProgress,
   passedCount,
   REVIEW_RECALL_SHARE,
@@ -28,10 +32,12 @@ import {
   addProfile,
   cleanName,
   createPack,
+  defaultSelection,
   loadStore,
   removeProfile,
   renameProfile,
   saveStore,
+  setLastSelection,
   setRoundLength,
   setVoice,
   updatePack,
@@ -133,6 +139,14 @@ function resolveSource(selection, profile, review) {
   }
   if (selection?.kind === 'pack') {
     const pack = profile.packs.find((entry) => entry.id === selection.id)
+    // A pass-off is the same word list asked a harder way, so it rides on the
+    // selection rather than being a track of its own on the map.
+    if (pack && selection.passOff) {
+      return {
+        kind: 'pack', id: pack.id, label: `${pack.name} pass-off`, color: profile.color, icon: '📝',
+        words: pack.words, passOff: true,
+      }
+    }
     if (pack) return { kind: 'pack', id: pack.id, label: pack.name, color: profile.color, icon: '📝', words: pack.words }
   }
   const tier = WORD_TIERS.find((entry) => entry.id === selection?.id)
@@ -166,7 +180,9 @@ function Header({ profile, onHome, onSwitch }) {
 // gesture in the same place rather than a trip back to the top of the page.
 // `note` replaces the passed-off bar for a track where that count means nothing
 // — review camp shrinks as words are learned rather than filling up.
-function TrackCard({ track, selected, passed, roundLength, note, onSelect, onStart, children }) {
+// `passOff` is { ready, remaining, onStart } for a list that can be tested as a
+// whole; leave it out for a track where passing the list off means nothing.
+function TrackCard({ track, selected, passed, roundLength, note, passOff, onSelect, onStart, children }) {
   const total = track.words.length
   const pct = total ? Math.round((passed / total) * 100) : 0
   return (
@@ -187,11 +203,24 @@ function TrackCard({ track, selected, passed, roundLength, note, onSelect, onSta
           <i aria-hidden="true">→</i>
         </button>
       ) : null}
+      {selected && passOff ? (
+        passOff.ready ? (
+          <button className="track-start track-passoff" type="button" onClick={passOff.onStart}>
+            <span>Pass off this list</span>
+            <b>All {total} words · typed from the sound</b>
+            <i aria-hidden="true">★</i>
+          </button>
+        ) : (
+          <p className="passoff-note">
+            Spell every word in a trail to unlock the pass-off — {passOff.remaining} to go.
+          </p>
+        )
+      ) : null}
     </div>
   )
 }
 
-function Home({ profile, selection, source, review, onSelect, onStart, onShowRewards, onShowFamily }) {
+function Home({ profile, selection, source, review, audio, onSelect, onStart, onShowRewards, onShowFamily }) {
   const { progress } = profile
   const level = levelFromXp(progress.xp)
   const accuracy = progress.wordsPracticed ? Math.round((progress.correctAnswers / progress.wordsPracticed) * 100) : 0
@@ -244,20 +273,30 @@ function Home({ profile, selection, source, review, onSelect, onStart, onShowRew
             <p>Spelling lists typed in for you.</p>
           </div>
           <div className="tier-grid">
-            {profile.packs.map((pack) => (
-              <TrackCard
-                key={pack.id}
-                track={{ kind: 'pack', label: pack.name, color: profile.color, icon: '📝', words: pack.words }}
-                selected={selection.kind === 'pack' && selection.id === pack.id}
-                passed={passedCount(progress, pack.words)}
-                roundLength={Math.min(profile.roundLength || ROUND_LENGTH, pack.words.length)}
-                onSelect={() => onSelect({ kind: 'pack', id: pack.id })}
-                onStart={onStart}
-              >
-                <strong>{pack.name}</strong>
-                <small>{pack.words.slice(0, 4).map((entry) => entry.word).join(', ')}{pack.words.length > 4 ? '…' : ''}</small>
-              </TrackCard>
-            ))}
+            {profile.packs.map((pack) => {
+              const counts = masteryCounts(progress, pack.words)
+              return (
+                <TrackCard
+                  key={pack.id}
+                  track={{ kind: 'pack', label: pack.name, color: profile.color, icon: '📝', words: pack.words }}
+                  selected={selection.kind === 'pack' && selection.id === pack.id}
+                  passed={passedCount(progress, pack.words)}
+                  roundLength={Math.min(profile.roundLength || ROUND_LENGTH, pack.words.length)}
+                  // Typing from sound alone is the whole point of a pass-off, so
+                  // a device with no voices does not offer one at all.
+                  passOff={audio ? {
+                    ready: canPassOff(progress, pack.words),
+                    remaining: counts.new + counts.seen + counts.practicing,
+                    onStart: () => { onSelect({ kind: 'pack', id: pack.id, passOff: true }); onStart() },
+                  } : null}
+                  onSelect={() => onSelect({ kind: 'pack', id: pack.id })}
+                  onStart={onStart}
+                >
+                  <strong>{pack.name}</strong>
+                  <small>{pack.words.slice(0, 4).map((entry) => entry.word).join(', ')}{pack.words.length > 4 ? '…' : ''}</small>
+                </TrackCard>
+              )
+            })}
           </div>
         </section>
       ) : null}
@@ -332,16 +371,23 @@ function Game({ source, progress, roundLength, onProgress, onComplete, onExit, o
     length: roundLength,
     audio,
     recallShare: source.recallShare,
+    progress,
+    priority: source.priority,
+    passOff: source.passOff,
   }))
   // Review camp empties as its words are learned, which can change the source
   // under a round in progress — so the trail keeps the name it started with.
   const [label] = useState(source.label)
   const [sourceKind] = useState(source.kind)
+  const [passOff] = useState(Boolean(source.passOff))
   const [retries, setRetries] = useState([])
   const [index, setIndex] = useState(0)
   const [feedback, setFeedback] = useState(null)
   const xpBefore = useRef(progress.xp)
   const missed = useRef(new Set())
+  // First attempts only, in the order they were asked, for the round-up on the
+  // Complete screen. A second look is practice and would double-count a word.
+  const results = useRef([])
   const nextRef = useRef(null)
 
   const items = useMemo(() => [...base, ...retries], [base, retries])
@@ -368,14 +414,19 @@ function Game({ source, progress, roundLength, onProgress, onComplete, onExit, o
     const { progress: awarded, xpEarned } = awardAnswer(progress, item.word, isCorrect, {
       mode: item.mode,
       practice: Boolean(item.retry),
+      unknown: choice === UNKNOWN_ANSWER,
+      passOff: Boolean(item.passOff),
     })
     const { progress: next, levelUps } = settleLevelUps(progress.xp, awarded)
     onProgress(next)
     if (levelUps.length) onLevelUp(levelUps)
+    if (!item.retry) results.current.push({ word: item.word, isCorrect, mode: item.mode })
 
     // Queue a missed word for one second look later in the trail. Once only —
-    // a word the child is stuck on should not trap them in a loop.
-    const queued = !isCorrect && !item.retry && !missed.current.has(item.word)
+    // a word the child is stuck on should not trap them in a loop. A pass-off
+    // is a test rather than practice, so a missed word simply goes to review
+    // camp instead of coming back easier in the same trail.
+    const queued = !isCorrect && !item.retry && !passOff && !missed.current.has(item.word)
     if (queued) {
       missed.current.add(item.word)
       setRetries((current) => [...current, makeRetry(item, { audio })])
@@ -393,6 +444,8 @@ function Game({ source, progress, roundLength, onProgress, onComplete, onExit, o
         earnedXp: progress.xp - xpBefore.current,
         source: label,
         sourceKind,
+        passOff,
+        results: results.current,
       })
       return
     }
@@ -402,6 +455,9 @@ function Game({ source, progress, roundLength, onProgress, onComplete, onExit, o
 
   const mode = MODE_REGISTRY[item.mode]
   const Question = mode.component
+  // A pass-off asks the same typing question, but it is a test of the whole
+  // list rather than a checkpoint inside one, so it says so.
+  const heading = passOff ? { ...mode, eyebrow: 'Pass-off', title: 'Spell it from memory' } : mode
   const step = inRetry ? index - base.length + 1 : index + 1
   const total = inRetry ? retries.length : base.length
   const filled = (step - 1 + (feedback ? 1 : 0)) / total
@@ -413,7 +469,6 @@ function Game({ source, progress, roundLength, onProgress, onComplete, onExit, o
           <div className={inRetry ? 'practice' : ''}><i style={{ width: `${filled * 100}%` }} /></div>
           <span>{inRetry ? `Second look ${step} of ${total}` : `${step} of ${total}`}</span>
         </div>
-        <div className="game-streak">🔥 {progress.streak}</div>
       </div>
       <section className="question-card">
         {inRetry ? (
@@ -423,15 +478,17 @@ function Game({ source, progress, roundLength, onProgress, onComplete, onExit, o
           </p>
         ) : null}
         <div className="question-heading">
-          <span className="mode-icon" aria-hidden="true">{mode.icon}</span>
-          <div><span className="soft-label">{mode.eyebrow}</span><h1>{mode.title}</h1></div>
+          <span className="mode-icon" aria-hidden="true">{heading.icon}</span>
+          <div><span className="soft-label">{heading.eyebrow}</span><h1>{heading.title}</h1></div>
         </div>
         <ListenButton word={item.word} sentence={item.sentence} audio={audio} voiceUri={voiceUri} />
         <p className="sentence"><span>“</span>{blankSentence(item.sentence, item.word)}<span>”</span></p>
         <div className="question-area">
           <Question key={index} item={item} onAnswer={answer} feedback={feedback} />
         </div>
-        {feedback ? null : (
+        {/* No way out of a pass-off: it only means something if every word was
+            actually attempted. */}
+        {feedback || passOff ? null : (
           <button className="unsure-button" type="button" onClick={() => answer(false, UNKNOWN_ANSWER)}>
             I don&apos;t know this one — show me
           </button>
@@ -461,6 +518,35 @@ function Game({ source, progress, roundLength, onProgress, onComplete, onExit, o
   )
 }
 
+// The words of the trail with a tick or a cross, missed ones first so the one
+// thing worth looking at again is at the top.
+function TrailResults({ summary }) {
+  const results = summary.results || []
+  if (!results.length) return null
+  const right = results.filter((entry) => entry.isCorrect).length
+  const ordered = [...results].sort((left, rightEntry) => Number(left.isCorrect) - Number(rightEntry.isCorrect))
+  return (
+    <div className="trail-results">
+      {summary.passOff ? (
+        <p className="results-headline">
+          {right === results.length
+            ? <b>Whole list passed off!</b>
+            : <><b>{right} of {results.length} passed off</b> The rest are waiting in review camp.</>}
+        </p>
+      ) : null}
+      <ul>
+        {ordered.map((entry) => (
+          <li className={entry.isCorrect ? 'is-right' : 'is-wrong'} key={entry.word}>
+            <i aria-hidden="true">{entry.isCorrect ? '✓' : '✕'}</i>
+            <span>{entry.word}</span>
+            <small>{entry.isCorrect ? 'right' : 'missed'}</small>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
 function Complete({ summary, progress, newBadges, canReplay, onHome, onReplay }) {
   return (
     <main id="main-content" tabIndex="-1" className="complete-shell">
@@ -473,6 +559,7 @@ function Complete({ summary, progress, newBadges, canReplay, onHome, onReplay })
           {summary.practiced ? `, plus ${summary.practiced} second look${summary.practiced === 1 ? '' : 's'}` : ''}
           , and every try made your spelling trail stronger.
         </p>
+        <TrailResults summary={summary} />
         <div className="complete-stats">
           <div><span>⚡</span><b>+{summary.earnedXp + SESSION_BONUS}</b><small>XP earned</small></div>
           <div><span>✨</span><b>{progress.fireflies}</b><small>fireflies total</small></div>
@@ -1048,13 +1135,54 @@ function ProfileEditor({ profile, onRename, onPickAvatar, onDone }) {
   )
 }
 
+// Where each word stands, in words a grown-up can read at a glance rather than
+// the internal rung names.
+const MASTERY_LABELS = {
+  new: 'new',
+  seen: 'seen',
+  practicing: 'practicing',
+  spelled: 'spelled',
+  passed: 'passed off',
+}
+
+// Ticking a word here is the paper half of the test: the app can only hear a
+// spelling typed on a screen, and a school list is usually written out.
+function WrittenTest({ pack, progress, onMarkWritten }) {
+  return (
+    <div className="written-test">
+      <p className="field-help">
+        After the words are spelled right in the app, give a written test on paper and tick the
+        ones spelled correctly. Unticking sends a word back to review camp.
+      </p>
+      <div className="written-test-rows">
+        {pack.words.map((entry) => {
+          const level = masteryOf(progress, entry.word)
+          return (
+            <label className="written-test-row" key={entry.word}>
+              <input
+                type="checkbox"
+                name={`written-${pack.id}-${entry.word}`}
+                checked={level === 'passed'}
+                onChange={(event) => onMarkWritten(entry.word, event.target.checked)}
+              />
+              <b>{entry.word}</b>
+              <small>{MASTERY_LABELS[level]}</small>
+            </label>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 function Family({
   store, profile, audio, onBack, onSwitch, onAddProfile, onRemoveProfile, onRename, onPickAvatar,
-  onAddPack, onRemovePack, onSavePack, onResetProfile, onRoundLength, onVoice, onRestoreStore, onShowPrivacy, onDraftChange,
+  onAddPack, onRemovePack, onSavePack, onResetProfile, onRoundLength, onVoice, onRestoreStore, onShowPrivacy, onDraftChange, onMarkWritten,
 }) {
   const [newName, setNewName] = useState('')
   const [editingId, setEditingId] = useState(null)
   const [editingPack, setEditingPack] = useState(null)
+  const [testingPack, setTestingPack] = useState(null)
   const onEdit = (id) => setEditingId((current) => (current === id ? null : id))
   return (
     <main id="main-content" tabIndex="-1" className="rewards-shell family-shell">
@@ -1116,10 +1244,21 @@ function Family({
                   <b>{pack.name}</b>
                   <small>{pack.words.map((entry) => entry.word).join(', ')}</small>
                 </div>
+                <button
+                  className="tiny-button"
+                  type="button"
+                  aria-expanded={testingPack === pack.id}
+                  onClick={() => setTestingPack(testingPack === pack.id ? null : pack.id)}
+                >
+                  {testingPack === pack.id ? 'Close test' : 'Written test'}
+                </button>
                 <button className="tiny-button" type="button" onClick={() => setEditingPack(editingPack === pack.id ? null : pack.id)}>
                   {editingPack === pack.id ? 'Close' : 'Edit'}
                 </button>
                 <ConfirmButton className="tiny-button" label="Delete" confirmLabel="Tap again to delete" onConfirm={() => onRemovePack(pack.id)} />
+                {testingPack === pack.id ? (
+                  <WrittenTest pack={pack} progress={profile.progress} onMarkWritten={onMarkWritten} />
+                ) : null}
               </li>
             ))}
           </ul>
@@ -1150,7 +1289,9 @@ function Family({
 
 export default function App() {
   const [store, setStore] = useState(() => loadStore())
-  const [selection, setSelection] = useState({ kind: 'tier', id: DEFAULT_TIER_ID })
+  // Open on whatever this player chose last — usually their school list — so
+  // the week's words are one tap away rather than back past Base Camp.
+  const [selection, setSelection] = useState(() => defaultSelection(activeProfile(store), DEFAULT_TIER_ID))
   const [view, setView] = useState(() => viewFromLocation())
   const [summary, setSummary] = useState(null)
   const [newBadges, setNewBadges] = useState([])
@@ -1189,6 +1330,7 @@ export default function App() {
       stopSpeaking()
       setGameStarted(false)
       setView(next)
+      setSelection((current) => (current.passOff ? { kind: current.kind, id: current.id } : current))
     }
     window.addEventListener('popstate', onPopState)
     return () => window.removeEventListener('popstate', onPopState)
@@ -1212,6 +1354,11 @@ export default function App() {
     window.history[replace ? 'replaceState' : 'pushState']({ spellTrailView: next }, '', urlForView(next))
     setView(next)
     if (next !== 'game') setGameStarted(false)
+    // A pass-off rides on the selection only for the trail it started. Once the
+    // player is back on the map, "Start trail" must mean an ordinary trail.
+    if (!['game', 'complete'].includes(next)) {
+      setSelection((current) => (current.passOff ? { kind: current.kind, id: current.id } : current))
+    }
     return true
   }
 
@@ -1236,11 +1383,19 @@ export default function App() {
     stopSpeaking()
   }
 
+  // Choosing a track remembers it for next time, so a child who only ever plays
+  // this week's list lands on it every visit.
+  function selectTrack(next) {
+    setSelection(next)
+    setStore((current) => setLastSelection(current, current.activeId, next))
+  }
+
   function switchProfile(id) {
     if (!navigate('home')) return
     stopSpeaking()
+    const next = store.profiles.find((entry) => entry.id === id)
     setStore((current) => ({ ...current, activeId: id }))
-    setSelection({ kind: 'tier', id: DEFAULT_TIER_ID })
+    setSelection(next ? defaultSelection(next, DEFAULT_TIER_ID) : { kind: 'tier', id: DEFAULT_TIER_ID })
   }
 
   return (
@@ -1257,7 +1412,8 @@ export default function App() {
           selection={selection}
           source={source}
           review={review}
-          onSelect={setSelection}
+          audio={audio}
+          onSelect={selectTrack}
           onStart={() => { setGameStarted(false); navigate('game', { force: true }) }}
           onShowRewards={() => navigate('rewards')}
           onShowFamily={() => navigate('family')}
@@ -1303,7 +1459,9 @@ export default function App() {
           onAddPack={(name, words) => setStore((current) => updateProfile(current, current.activeId, (entry) => ({ ...entry, packs: [...entry.packs, createPack(name, words)] })))}
           onRemovePack={(id) => {
             setStore((current) => updateProfile(current, current.activeId, (entry) => ({ ...entry, packs: entry.packs.filter((pack) => pack.id !== id) })))
-            setSelection((current) => (current.kind === 'pack' && current.id === id ? { kind: 'tier', id: DEFAULT_TIER_ID } : current))
+            setSelection((current) => (current.kind === 'pack' && current.id === id
+              ? defaultSelection({ ...profile, packs: profile.packs.filter((pack) => pack.id !== id) }, DEFAULT_TIER_ID)
+              : current))
           }}
           onResetProfile={() => setStore((current) => updateProfile(current, current.activeId, (entry) => ({ ...entry, progress: newProgress() })))}
           onSavePack={(id, name, words) => setStore((current) => updatePack(current, current.activeId, id, { name: name.trim().slice(0, 40) || 'This week', words }))}
@@ -1318,6 +1476,10 @@ export default function App() {
           }}
           onShowPrivacy={() => navigate('privacy')}
           onDraftChange={setHasUnsavedPack}
+          onMarkWritten={(word, passed) => setStore((current) => updateProfile(current, current.activeId, (entry) => ({
+            ...entry,
+            progress: markWritten(entry.progress, word, passed),
+          })))}
         />
       ) : null}
       {levelUps.length ? <LevelUpModal levelUps={levelUps} onClose={() => setLevelUps([])} /> : null}

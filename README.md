@@ -43,6 +43,11 @@ the only thing that ever leaves the device is a backup a grown-up explicitly ask
 - **Correction inside the trail.** A missed word comes back before the trail ends, one
   step easier than the mode that caught it. Second looks count towards review but never
   towards the streak, so the accuracy number stays honest.
+- **A five-rung mastery ladder, per word.** New → seen → practicing → spelled → passed.
+  Only typing a word correctly from nothing but the spoken word — on a first try, in an
+  ordinary trail — reaches *spelled*; only a dedicated **pass-off trail**, or a grown-up
+  ticking it off on a written test, reaches *passed*. A later slip knocks a word straight
+  back off *passed*, on purpose: it means "can spell it today," not "could once."
 - **384 hand-authored words** across six tiers. Every word carries a sentence, syllable
   chunks, two *plausible* misspellings, and a fill-the-gap blank. The decoys are written
   by hand, because generated ones tend to be non-words a child can rule out without
@@ -110,7 +115,8 @@ list, the length, and the mode plan — so a new game mode only has to supply on
 and each mode declares what a word must carry (`MODE_REQUIREMENTS`). A word with no
 syllable chunks can't be a build-the-word question, so the planner steps *down* a
 difficulty ladder rather than rendering something unanswerable. The same guard is what
-makes the app work on a device with no speech voices at all.
+makes the app work on a device with no speech voices at all. A word's own mastery caps
+how hard it can be asked, too — a word met for the first time is never a blank text box.
 
 [CLAUDE.md](./CLAUDE.md) has the full architecture notes, the design reasoning behind
 review camp and the XP curve, and the deployment/ops detail.

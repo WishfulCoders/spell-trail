@@ -15,11 +15,12 @@ what to be careful about" companion.
 | Storage | `BACKUPS` KV — optional backups only; namespace ID also in `wrangler.prod.jsonc` |
 | Repo | `github.com/wishfulcoders/spell-trail`, public, committed directly to `main` |
 
-Shipped: six tiers of 64 words, five question modes, review camp, in-session
-correction, an "I don't know" escape on every question, per-trail passed-off counts,
-up to six player profiles, parent-entered word lists, firefly-bought companions,
-backup codes, per-player session length, voice selection, a levelling curve with a
-level-up celebration, and a privacy page.
+Shipped: six tiers of 64 words, five question modes, a five-rung per-word mastery
+ladder with a pass-off trail and a written-test check-off, review camp, in-session
+correction, an "I don't know" escape on every question, up to six player profiles,
+parent-entered word lists, firefly-bought companions, backup codes, per-player
+session length, voice selection, a levelling curve with a level-up celebration, and
+a privacy page.
 
 Known gaps, in the order worth fixing:
 
@@ -49,12 +50,20 @@ leaves the device is an optional backup the grown-up asks for — see **Backup**
 has to supply one of them:
 
 - **Words** — `buildRound({ words })` takes any list: a tier, a custom pack, or the
-  review queue.
+  review queue. For a tier, `orderByNeed` puts revision first — words met but not yet
+  passed off, longest-unseen first, up to half the trail — then new words, and only
+  reaches for already-passed words once nothing else is left. `buildRound({ passOff: true })`
+  skips all of that and builds the pass-off trail instead: every word, typed from sound
+  alone (see **Mastery**).
 - **Length** — `length` clamps to the pool, so a five-word pack makes a five-word trail.
-- **Modes** — `planModes(length)` spaces *recall checkpoints* evenly and rotates the
-  three supported modes between them. A checkpoint alternates between typing what you
-  hear and memory trail, so a trail asks for the whole word twice in two different
-  ways. At length 8 that is one of each, at indices 3 and 7; at length 3 it is one.
+- **Modes** — `planModes(length)` anchors *recall checkpoints* at roughly evenly spaced
+  slots ending on the last question; every checkpoint but the last drifts one slot either
+  way so two trails don't feel identical, and the two recall modes are dealt in random
+  order rather than always typing first. The three supporting modes rotate between
+  checkpoints. `buildRound` then caps each word's assigned mode at its `modeCeiling`
+  (see **Mastery**) and, before that, swaps recall checkpoints onto words that have
+  already reached the ceiling to be typed — a checkpoint landing on a word met thirty
+  seconds ago would just get capped back down anyway.
 
 Each mode declares what a word must carry (`MODE_REQUIREMENTS`). A word with no
 syllable chunks cannot be a build-the-word question, so `resolveMode` steps down
@@ -65,6 +74,36 @@ need no audio, and written clues are shown instead.
 `src/modes.jsx` holds the per-mode React components and the registry that maps a mode
 name to its component and copy. Memory trail shows the word for `peekMs(word)` — longer
 words get longer, capped at five seconds — then hides it and asks for it typed.
+
+## Mastery
+
+Every word climbs the same ladder, `MASTERY = ['new', 'seen', 'practicing', 'spelled',
+'passed']` (`masteryOf`). Getting a supporting question right — listen, fill-the-gap,
+build-the-word — is not spelling, so it only carries a word to `practicing`; only typing
+it from the spoken word alone, correctly, on a first attempt in an ordinary trail moves
+it to `spelled` (`typedDays` records the distinct days this has happened; memory trail
+and second looks don't count). `passed` is reached only in a pass-off trail
+(`buildRound({ passOff: true })`, scored with `awardAnswer(..., { passOff: true })`) or
+by a grown-up ticking a word off on a written test (`markWritten`). There is no
+`PASS_THRESHOLD` shortcut any more — a word cannot be passed off by getting lucky once
+in an ordinary trail.
+
+Any first-attempt miss, in any mode, knocks a word straight back off `passed` (down to
+`new` or wherever its stats land it) — "passed off" has to keep meaning "can spell it
+today", not "could once." A track's progress bar can go backwards by design.
+
+`canPassOff(progress, words)` unlocks a list's pass-off trail once every word on it is
+at least `spelled`. `markWritten(progress, word, passed)` records the grown-up's check-off:
+ticked stamps the word `passed` and clears it out of review camp; unticked counts as a
+miss (`missedModes.written`) and sends it back into camp, same as any other wrong answer.
+
+`modeCeiling(progress, word)` caps how hard a word may be asked, independent of the mode
+plan above: never met → listen or fill-the-gap only; met but never right → up to
+build-the-word; right once → up to memory trail; right twice → typing. This is why a
+child's first meeting with a word is never a blank text box.
+
+"I don't know" (`unknown: true`) earns no XP — a fair thing to ask for, but not an
+attempt, so it can't be farmed for XP by tapping it repeatedly.
 
 ## Review camp
 
@@ -79,13 +118,17 @@ player could have met (the six tiers plus their own lists) and shows the track o
 trail map only when it holds something. A review trail takes the words at the *front*
 of that list rather than sampling it, so the neediest words come up first.
 
+Unticking a word on a written test (`markWritten`) is a miss like any other: it sends
+the word back into camp exactly as a wrong answer in a trail would.
+
 ## Correction
 
 A missed word comes back before the trail ends, once, one step easier than the mode it
 was missed in (`easierMode` walks `MODE_DIFFICULTY` down from typing toward
 listen-and-choose). Second looks are scored as practice: they update that word's record
 for later review, but they do not move the streak or the accuracy counters, which
-describe first attempts only.
+describe first attempts only — and, unlike a first-attempt miss, a wrong practice
+answer cannot knock a word off `passed` (see **Mastery**).
 
 ## Word data
 
@@ -110,6 +153,10 @@ Grown-ups can type in a weekly spelling list under **Players & word lists**. Ent
 one per line or comma-separated, and `word: sentence` supplies your own sentence.
 `src/wordgen.js` syllabifies each word and generates misspellings so a bare list still
 plays every game mode.
+
+Each profile remembers `lastSelection`. `defaultSelection` (`src/profiles.js`) opens the
+app on whatever the player picked last, else their newest word list, else Base Camp —
+so a player who's mid-way through a custom list lands back on it rather than the tiers.
 
 ## Levelling
 
@@ -249,6 +296,28 @@ does not duplicate the app's own privacy page, which stays canonical inside the 
 
 Anything that changes the pitch (new modes, new tiers, a changed support address) should be
 reflected there too. It has no dependencies and no analytics; keep it that way.
+
+### Search and assistant metadata
+
+The landing page is written to be found for "free spelling app for kids, no ads" and to be
+quoted by assistants. The rules, in order of leverage:
+
+- **One description.** The sentence in the landing page's `<meta name="description">` is
+  the description of Spell Trail. It is repeated in `index.html`, `public/llms.txt`,
+  `site/llms.txt`, both JSON-LD graphs, and the hub's `apps.ts`. Change it in all of them.
+- **The lede under the H1 is a quick answer**: 40–60 words that say what it is, who it is
+  for, and that it is free with no ads and no account. Assume it gets quoted verbatim.
+- **The FAQ section and the `FAQPage` JSON-LD must match word for word.** Edit both.
+- **Entity ids are shared.** The Organization (`https://wishfulcoders.com/#organization`)
+  and Person (`https://wishfulcoders.com/about/#person`) ids are the hub's. The app id
+  (`https://spelltrail.app/#app`) is used by both the landing page and the app shell.
+
+`scripts/landing-schema.test.js` enforces all of that under `npm test`. The wider plan
+lives in `wishful_coders_planning/growth-plan.md`.
+
+`public/robots.txt`, `public/sitemap.xml`, and `public/llms.txt` ship with the app;
+`site/` carries its own copies for `about.spelltrail.app`. After a deploy, resubmit the
+sitemap in Google Search Console and Bing Webmaster Tools if the page set changed.
 
 ## Email
 
