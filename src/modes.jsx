@@ -1,6 +1,28 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { blankFor, shuffle } from './game.js'
 
+export const SPELLING_KEY_ROWS = [
+  'qwertyuiop'.split(''),
+  'asdfghjkl'.split(''),
+  'zxcvbnm'.split(''),
+]
+
+const VOWELS = new Set(['a', 'e', 'i', 'o', 'u'])
+
+// Phone keyboards and pasted text can contain curly punctuation or invisible
+// formatting characters even when the answer looks identical on screen. Keep
+// meaningful spelling characters, but canonicalize those visual equivalents
+// before grading either side.
+export function normalizeSpelling(value) {
+  return String(value || '')
+    .normalize('NFKC')
+    .replace(/[\u2018\u2019\u02bc]/g, "'")
+    .replace(/[\u2010-\u2015\u2212]/g, '-')
+    .replace(/[\u200b-\u200d\ufeff]/g, '')
+    .trim()
+    .toLocaleLowerCase('en-US')
+}
+
 // Each question component takes the same props:
 //   item      the round entry (word, sentence, chunks, distractors, blank, mode)
 //   onAnswer  (isCorrect, choice) — `choice` is what the player actually picked
@@ -128,31 +150,54 @@ function SpellingInput({ id, label, placeholder, item, onAnswer, feedback }) {
   const inputRef = useRef(null)
   const disabled = Boolean(feedback)
   const state = feedback ? (feedback.isCorrect ? 'is-correct' : 'is-wrong') : ''
-  // Focus on every device, phones included: a typing checkpoint is asking the
-  // child to type, so the keyboard should already be up rather than costing
-  // them a tap. `preventScroll` keeps the browser from yanking the question out
-  // of view as it opens. iOS only raises the keyboard when focus happens inside
-  // the tap that mounted this input, which covers the typing checkpoint and the
-  // "hide it" button, but not memory trail's own timer running out.
+  const extraKeys = [item.word.includes("'") ? "'" : null, item.word.includes('-') ? '-' : null].filter(Boolean)
+
+  // Focus the answer field for physical-keyboard users. It is read-only so a
+  // phone never opens its native keyboard (and therefore never reveals the
+  // answer in a suggestion strip); key presses are handled by the form below.
   useEffect(() => { inputRef.current?.focus({ preventScroll: true }) }, [])
+
+  function addCharacter(character) {
+    if (!disabled) setValue((current) => current + character)
+  }
+
+  function removeCharacter() {
+    if (!disabled) setValue((current) => current.slice(0, -1))
+  }
+
+  function handleKeyDown(event) {
+    if (disabled) return
+    if (/^[a-z]$/i.test(event.key)) {
+      event.preventDefault()
+      addCharacter(event.key.toLowerCase())
+    } else if ((event.key === "'" && item.word.includes("'")) || (event.key === '-' && item.word.includes('-'))) {
+      event.preventDefault()
+      addCharacter(event.key)
+    } else if (event.key === 'Backspace') {
+      event.preventDefault()
+      removeCharacter()
+    }
+  }
+
   return (
     <form
       className="type-form"
+      onKeyDown={handleKeyDown}
       onSubmit={(event) => {
         event.preventDefault()
-        const typed = value.trim()
-        if (typed) onAnswer(typed.toLowerCase() === item.word, typed.toLowerCase())
+        const typed = normalizeSpelling(value)
+        const answer = normalizeSpelling(item.word)
+        if (typed) onAnswer(typed === answer, typed)
       }}
     >
       <label htmlFor={id}>{label}</label>
-      {/* A phone keyboard that suggests the word defeats the whole exercise.
-          `autocorrect` is what iOS listens to, and Chrome turns
-          `spellcheck=false` into the Android IME's no-suggestions flag. */}
       <input
         id={id}
         ref={inputRef}
         name={id}
         className={state}
+        type="text"
+        inputMode="none"
         autoComplete="off"
         autoCorrect="off"
         autoCapitalize="none"
@@ -162,9 +207,54 @@ function SpellingInput({ id, label, placeholder, item, onAnswer, feedback }) {
         data-lpignore="true"
         value={value}
         disabled={disabled}
-        onChange={(event) => setValue(event.target.value)}
+        readOnly
         placeholder={placeholder}
       />
+      <p className="spelling-keyboard-hint"><i aria-hidden="true" /> Dotted keys are vowels</p>
+      <div className="spelling-keyboard" role="group" aria-label="Spelling keyboard">
+        {SPELLING_KEY_ROWS.map((row, rowIndex) => (
+          <div className="spelling-keyboard-row" key={row.join('')}>
+            {row.map((letter) => {
+              const vowel = VOWELS.has(letter)
+              return (
+                <button
+                  className={`spelling-key ${vowel ? 'is-vowel' : ''}`}
+                  type="button"
+                  key={letter}
+                  disabled={disabled}
+                  onClick={() => addCharacter(letter)}
+                  aria-label={vowel ? `${letter}, vowel` : undefined}
+                >
+                  {letter}
+                </button>
+              )
+            })}
+            {rowIndex === SPELLING_KEY_ROWS.length - 1 ? extraKeys.map((character) => (
+              <button
+                className="spelling-key spelling-extra"
+                type="button"
+                key={character}
+                disabled={disabled}
+                onClick={() => addCharacter(character)}
+                aria-label={character === "'" ? 'Apostrophe' : 'Hyphen'}
+              >
+                {character}
+              </button>
+            )) : null}
+            {rowIndex === SPELLING_KEY_ROWS.length - 1 ? (
+              <button
+                className="spelling-key spelling-delete"
+                type="button"
+                disabled={disabled || !value}
+                onClick={removeCharacter}
+                aria-label="Delete last letter"
+              >
+                ⌫
+              </button>
+            ) : null}
+          </div>
+        ))}
+      </div>
       <button className="check-button" type="submit" disabled={disabled || !value.trim()}>
         Check my spelling
       </button>

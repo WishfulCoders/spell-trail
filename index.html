@@ -4,13 +4,83 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#173f37" />
-    <meta name="description" content="A calm, rewarding spelling game with short practice trails." />
+    <title>Spell Trail — free, ad-free spelling app for kids</title>
+    <!-- Same one-line description as site/index.html and both llms.txt files. Keep them identical. -->
+    <meta name="description" content="Spell Trail is a free, ad-free spelling app for kids in grades 1–8: five-minute practice trails, your own weekly word lists, and no account needed." />
+    <link rel="canonical" href="https://spelltrail.app/" />
+    <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Spell Trail" />
+    <meta property="og:url" content="https://spelltrail.app/" />
+    <meta property="og:title" content="Spell Trail — free, ad-free spelling app for kids" />
+    <meta property="og:description" content="Spell Trail is a free, ad-free spelling app for kids in grades 1–8: five-minute practice trails, your own weekly word lists, and no account needed." />
+    <meta property="og:image" content="https://about.spelltrail.app/social.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Spell Trail — spelling that feels like a walk, not a worksheet." />
+    <meta name="twitter:card" content="summary_large_image" />
+
+    <!--
+      The app is a single React page, so a crawler that does not run JavaScript sees
+      nothing but this head. The JSON-LD below describes the app with the same @id the
+      landing page uses, and the <noscript> block in <body> gives non-JS readers one
+      sentence and a link to the full description at about.spelltrail.app.
+    -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "Organization",
+          "@id": "https://wishfulcoders.com/#organization",
+          "name": "Wishful Coders",
+          "url": "https://wishfulcoders.com/"
+        },
+        {
+          "@type": "WebPage",
+          "@id": "https://spelltrail.app/#webpage",
+          "url": "https://spelltrail.app/",
+          "name": "Spell Trail — free, ad-free spelling app for kids",
+          "description": "Spell Trail is a free, ad-free spelling app for kids in grades 1–8: five-minute practice trails, your own weekly word lists, and no account needed.",
+          "about": { "@id": "https://spelltrail.app/#app" },
+          "inLanguage": "en"
+        },
+        {
+          "@type": ["SoftwareApplication", "WebApplication"],
+          "@id": "https://spelltrail.app/#app",
+          "name": "Spell Trail",
+          "url": "https://spelltrail.app/",
+          "description": "Spell Trail is a free, ad-free spelling app for kids in grades 1–8: five-minute practice trails, your own weekly word lists, and no account needed.",
+          "applicationCategory": "EducationalApplication",
+          "operatingSystem": "Any (runs in a web browser)",
+          "isAccessibleForFree": true,
+          "isFamilyFriendly": true,
+          "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+          "typicalAgeRange": "6-14",
+          "educationalLevel": "Grades 1–8",
+          "image": "https://about.spelltrail.app/social.png",
+          "sameAs": ["https://about.spelltrail.app/", "https://github.com/wishfulcoders/spell-trail"],
+          "publisher": { "@id": "https://wishfulcoders.com/#organization" },
+          "mainEntityOfPage": { "@id": "https://about.spelltrail.app/#webpage" }
+        }
+      ]
+    }
+    </script>
+
     <link rel="preload" href="/fonts/dm-sans-latin-var.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="/fonts/manrope-latin-var.woff2" as="font" type="font/woff2" crossorigin />
-    <title>Spell Trail</title>
   </head>
   <body>
     <div id="root"></div>
+    <noscript>
+      <p>
+        Spell Trail is a free, ad-free spelling app for kids in grades 1–8: five-minute practice
+        trails, your own weekly word lists, and no account needed. It needs JavaScript to play.
+        Read more at <a href="https://about.spelltrail.app/">about.spelltrail.app</a>.
+        A <a href="https://wishfulcoders.com">Wishful Coders</a> app.
+      </p>
+    </noscript>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

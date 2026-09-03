@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { MODE_REGISTRY, PEEK_MAX_MS, peekMs } from './modes.jsx'
+import { MODE_REGISTRY, PEEK_MAX_MS, SPELLING_KEY_ROWS, normalizeSpelling, peekMs } from './modes.jsx'
 import { MODES } from './game.js'
 
 describe('mode registry', () => {
@@ -23,5 +23,31 @@ describe('memory trail peek', () => {
 
   it('caps the peek so a long word does not sit there being copied', () => {
     expect(peekMs('a'.repeat(40))).toBe(PEEK_MAX_MS)
+  })
+})
+
+describe('spelling answer normalization', () => {
+  it('ignores capitalization and surrounding space', () => {
+    expect(normalizeSpelling('  RoCkEt  ')).toBe('rocket')
+  })
+
+  it('treats smart punctuation as the spelling punctuation it resembles', () => {
+    expect(normalizeSpelling('mother\u2019s')).toBe("mother's")
+    expect(normalizeSpelling('merry\u2013go\u2013round')).toBe('merry-go-round')
+  })
+
+  it('removes invisible characters inserted by input methods', () => {
+    expect(normalizeSpelling('spell\u200bing')).toBe('spelling')
+  })
+})
+
+describe('spelling keyboard', () => {
+  it('uses the familiar QWERTY row layout', () => {
+    expect(SPELLING_KEY_ROWS.map((row) => row.join(''))).toEqual(['qwertyuiop', 'asdfghjkl', 'zxcvbnm'])
+  })
+
+  it('offers every letter exactly once', () => {
+    const letters = SPELLING_KEY_ROWS.flat()
+    expect([...letters].sort().join('')).toBe('abcdefghijklmnopqrstuvwxyz')
   })
 })

@@ -1,0 +1,32 @@
+# Spell Trail
+
+> Spell Trail is a free, ad-free spelling app for kids in grades 1–8: five-minute practice trails, your own weekly word lists, and no account needed.
+
+Spell Trail is made by Wishful Coders (https://wishfulcoders.com), a one-person
+studio building ad-free, privacy-first apps for families. It is free forever:
+no trial, no subscription, no premium tier, no ads, no trackers, and no account.
+Progress is stored in the browser on the device. The code is open source under
+the AGPL-3.0.
+
+## What it does
+
+- Five-minute spelling trails of 3 to 16 words.
+- Six tiers of 64 hand-written words covering grades 1 to 8 (roughly ages 6 to 14).
+- Parents can paste in this week's spelling list from school.
+- Five question modes: listen and spot, fill the gap, build the word, memory
+  trail, and typing checkpoint.
+- Missed words come back once in the same trail, then wait in review camp until
+  answered cleanly twice.
+- Up to six players share one device with separate progress.
+- Runs in any modern browser on iPad, Chromebook, Android, or a laptop. Nothing to install.
+
+## Key pages
+
+- [Play](https://spelltrail.app/): the app itself.
+- [About and FAQ](https://about.spelltrail.app/): what it is, who it is for, privacy, and the answers to "is it really free" and "are there ads".
+- [Source code](https://github.com/wishfulcoders/spell-trail): the complete code, AGPL-3.0.
+- [Wishful Coders](https://wishfulcoders.com/): the studio and its other ad-free family apps.
+
+## Contact
+
+support@spelltrail.app

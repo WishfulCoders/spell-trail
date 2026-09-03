@@ -3,20 +3,182 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Spell Trail — a calm spelling game for short practice sessions</title>
-<meta name="description" content="A calm, local-first spelling game built around five-minute trails. Six tiers of hand-authored words, five question modes, and a review camp that quietly brings back the ones that were missed. No accounts, no ads." />
+<title>Spell Trail — free, ad-free spelling app for kids</title>
+<!--
+  The description below is THE one-line description of Spell Trail. The same sentence
+  lives in the app's index.html, both llms.txt files, and the Wishful Coders hub.
+  scripts/landing-schema.test.js fails if the copies here drift from each other.
+-->
+<meta name="description" content="Spell Trail is a free, ad-free spelling app for kids in grades 1–8: five-minute practice trails, your own weekly word lists, and no account needed." />
 <link rel="canonical" href="https://about.spelltrail.app/" />
+<meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large" />
 <meta name="theme-color" content="#173f37" />
 
 <meta property="og:type" content="website" />
 <meta property="og:url" content="https://about.spelltrail.app/" />
-<meta property="og:title" content="Spell Trail — a calm spelling game for short practice sessions" />
-<meta property="og:description" content="Five-minute trails, 384 hand-authored words, and a review camp that brings back the ones that were missed. No accounts, no ads, open source." />
+<meta property="og:title" content="Spell Trail — free, ad-free spelling app for kids" />
+<meta property="og:description" content="Spell Trail is a free, ad-free spelling app for kids in grades 1–8: five-minute practice trails, your own weekly word lists, and no account needed." />
 <meta property="og:image" content="https://about.spelltrail.app/social.png" />
 <meta property="og:image:width" content="1200" />
 <meta property="og:image:height" content="630" />
 <meta property="og:image:alt" content="Spell Trail — spelling that feels like a walk, not a worksheet." />
 <meta name="twitter:card" content="summary_large_image" />
+
+<!--
+  One JSON-LD graph. The Organization and Person ids are the same ones wishfulcoders.com
+  uses, so an engine sees one studio and one author across every site. The app node's id
+  (https://spelltrail.app/#app) is repeated in the app's own index.html for the same reason.
+  FAQ answers must match the visible FAQ section word for word; the test enforces it.
+-->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "@id": "https://wishfulcoders.com/#organization",
+      "name": "Wishful Coders",
+      "url": "https://wishfulcoders.com/",
+      "email": "hello@wishfulcoders.com",
+      "founder": { "@id": "https://wishfulcoders.com/about/#person" },
+      "sameAs": ["https://github.com/wishfulcoders"]
+    },
+    {
+      "@type": "Person",
+      "@id": "https://wishfulcoders.com/about/#person",
+      "name": "Jeff Law",
+      "url": "https://wishfulcoders.com/about/",
+      "jobTitle": "Founder and engineer",
+      "worksFor": { "@id": "https://wishfulcoders.com/#organization" }
+    },
+    {
+      "@type": "WebSite",
+      "@id": "https://about.spelltrail.app/#website",
+      "url": "https://about.spelltrail.app/",
+      "name": "Spell Trail",
+      "publisher": { "@id": "https://wishfulcoders.com/#organization" },
+      "inLanguage": "en"
+    },
+    {
+      "@type": "WebPage",
+      "@id": "https://about.spelltrail.app/#webpage",
+      "url": "https://about.spelltrail.app/",
+      "name": "Spell Trail — free, ad-free spelling app for kids",
+      "description": "Spell Trail is a free, ad-free spelling app for kids in grades 1–8: five-minute practice trails, your own weekly word lists, and no account needed.",
+      "isPartOf": { "@id": "https://about.spelltrail.app/#website" },
+      "about": { "@id": "https://spelltrail.app/#app" },
+      "primaryImageOfPage": { "@type": "ImageObject", "url": "https://about.spelltrail.app/social.png", "width": 1200, "height": 630 },
+      "inLanguage": "en"
+    },
+    {
+      "@type": ["SoftwareApplication", "WebApplication"],
+      "@id": "https://spelltrail.app/#app",
+      "name": "Spell Trail",
+      "url": "https://spelltrail.app/",
+      "description": "Spell Trail is a free, ad-free spelling app for kids in grades 1–8: five-minute practice trails, your own weekly word lists, and no account needed.",
+      "applicationCategory": "EducationalApplication",
+      "applicationSubCategory": "Spelling practice",
+      "operatingSystem": "Any (runs in a web browser)",
+      "browserRequirements": "Requires JavaScript and a modern browser",
+      "isAccessibleForFree": true,
+      "isFamilyFriendly": true,
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD",
+        "availability": "https://schema.org/InStock",
+        "description": "Free forever. No trial, no subscription, no in-app purchases, no ads."
+      },
+      "audience": {
+        "@type": "EducationalAudience",
+        "educationalRole": "student",
+        "audienceType": "children in grades 1 to 8 and their parents"
+      },
+      "typicalAgeRange": "6-14",
+      "educationalLevel": "Grades 1–8",
+      "educationalUse": "practice",
+      "learningResourceType": "spelling practice",
+      "featureList": [
+        "Five-minute spelling trails",
+        "Six tiers of 64 hand-written words, grades 1 to 8",
+        "Paste in this week's spelling list from school",
+        "Five question modes, from listen-and-spot to typing from memory",
+        "Missed words return until answered cleanly twice",
+        "Up to six players on one device",
+        "No account, no ads, no trackers",
+        "Optional backup code instead of a login"
+      ],
+      "image": "https://about.spelltrail.app/social.png",
+      "screenshot": "https://about.spelltrail.app/social.png",
+      "inLanguage": "en",
+      "license": "https://www.gnu.org/licenses/agpl-3.0.html",
+      "sameAs": [
+        "https://about.spelltrail.app/",
+        "https://github.com/wishfulcoders/spell-trail"
+      ],
+      "author": { "@id": "https://wishfulcoders.com/about/#person" },
+      "creator": { "@id": "https://wishfulcoders.com/#organization" },
+      "publisher": { "@id": "https://wishfulcoders.com/#organization" },
+      "mainEntityOfPage": { "@id": "https://about.spelltrail.app/#webpage" }
+    },
+    {
+      "@type": "BreadcrumbList",
+      "@id": "https://about.spelltrail.app/#breadcrumbs",
+      "itemListElement": [
+        { "@type": "ListItem", "position": 1, "name": "Wishful Coders", "item": "https://wishfulcoders.com/" },
+        { "@type": "ListItem", "position": 2, "name": "Apps", "item": "https://wishfulcoders.com/apps/" },
+        { "@type": "ListItem", "position": 3, "name": "Spell Trail", "item": "https://about.spelltrail.app/" }
+      ]
+    },
+    {
+      "@type": "FAQPage",
+      "@id": "https://about.spelltrail.app/#faq",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "Is Spell Trail really free?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Yes, completely. There is no trial, no subscription, no premium tier, and nothing to unlock. Every word, tier, and question mode is available from the first visit. The code is open source under the AGPL, so that promise can be checked rather than taken on trust." }
+        },
+        {
+          "@type": "Question",
+          "name": "Are there ads?",
+          "acceptedAnswer": { "@type": "Answer", "text": "No. Spell Trail has no advertising, no ad network, and no third-party scripts. Even the fonts are self-hosted so nothing on the page phones home. The only outside request the app makes is a cookieless page-view count from Cloudflare, which is disclosed on the app's privacy page." }
+        },
+        {
+          "@type": "Question",
+          "name": "Does my child need an account?",
+          "acceptedAnswer": { "@type": "Answer", "text": "No. There is no sign-up, email, or password. Progress is saved in the browser on the device you use. If you want to move it to another device, a grown-up can ask for an optional backup code." }
+        },
+        {
+          "@type": "Question",
+          "name": "What ages is Spell Trail for?",
+          "acceptedAnswer": { "@type": "Answer", "text": "The built-in words run from grades 1 to 8, roughly ages 6 to 14, in six tiers from Base Camp to Expedition Peak. Younger or older children can use their own word list, so the app fits whatever list came home from school." }
+        },
+        {
+          "@type": "Question",
+          "name": "Can I use my child's school spelling list?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Yes. Paste this week's words in, one per line or comma-separated. Spell Trail breaks each word into syllables and writes plausible misspellings for it, so a plain list plays every question mode." }
+        },
+        {
+          "@type": "Question",
+          "name": "Does it work on an iPad, a Chromebook, or a phone?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Yes. Spell Trail runs in any modern browser with nothing to install. The read-aloud voice comes from the device's own speech synthesis, so it works on iPads, Chromebooks, Android tablets, and laptops." }
+        },
+        {
+          "@type": "Question",
+          "name": "Can more than one child use it?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Yes. Up to six players share one device, each with separate progress, badges, word lists, and trail companions." }
+        },
+        {
+          "@type": "Question",
+          "name": "Who makes Spell Trail?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Wishful Coders, a one-person studio in Colorado run by a parent. It builds ad-free, privacy-first apps for families and publishes the code for all of them. Spell Trail is supported by donations, not by advertising or by selling data." }
+        }
+      ]
+    }
+  ]
+}
+</script>
 
 <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
 <link rel="apple-touch-icon" href="/favicon.svg" />
@@ -220,6 +382,8 @@ a:focus-visible, button:focus-visible { outline: 4px solid rgba(31, 112, 151, .3
 .grownup div:nth-last-child(-n+2) { border-bottom: 0; }
 .grownup h3 { font-size: 17px; }
 .grownup p { margin: 9px 0 0; font-size: 14px; color: var(--ink-soft); }
+.faq h3 { font-size: 16px; }
+.faq p { font-size: 14.5px; line-height: 1.6; }
 @media (max-width: 720px) { .grownup { grid-template-columns: 1fr; } .grownup div, .grownup div:nth-child(odd), .grownup div:nth-last-child(-n+2) { border-right: 0; border-bottom: 1px solid var(--line); } .grownup div:last-child { border-bottom: 0; } }
 code { padding: 2px 6px; border-radius: 5px; background: rgba(23,63,55,.08); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .88em; }
 
@@ -261,6 +425,7 @@ footer { border-top: 1px solid var(--line); }
       <a class="hide-sm" href="#how">How it works</a>
       <a class="hide-sm" href="#modes">Question modes</a>
       <a class="hide-sm" href="#privacy">Privacy</a>
+      <a class="hide-sm" href="#faq">FAQ</a>
       <a class="nav-cta" href="https://spelltrail.app">Play free</a>
     </div>
   </nav>
@@ -275,9 +440,12 @@ footer { border-top: 1px solid var(--line); }
         <div class="hero-copy">
           <span class="eyebrow">Spelling practice, five minutes at a time</span>
           <h1>Spelling that feels like a <em>walk</em>, not a worksheet.</h1>
+          <!-- Quick answer: 40–60 words, self-contained, written to be quoted verbatim. -->
           <p class="lede">
-            Short, calm spelling practice that adapts to each word. Missed words return
-            until they stick — with no accounts, ads, or setup.
+            Spell Trail is a free spelling app for children in grades 1 to 8, roughly ages
+            6 to 14. Short five-minute trails draw on six tiers of hand-written words or this
+            week's list from school, and missed words come back until they stick. No ads, no
+            account, no trial, and it stays free.
           </p>
           <div class="cta-row">
             <a class="btn btn-primary" href="https://spelltrail.app">
@@ -310,8 +478,8 @@ footer { border-top: 1px solid var(--line); }
   <section class="section" id="how">
     <div class="wrap">
       <div class="section-head">
-        <span class="eyebrow">How a trail works</span>
-        <h2>Short enough to finish, spaced enough to stick.</h2>
+        <span class="eyebrow">Short enough to finish, spaced enough to stick</span>
+        <h2>How does a trail work?</h2>
         <p>
           The whole design assumes a child who has ten minutes before dinner and no
           patience for a loading screen.
@@ -435,9 +603,9 @@ footer { border-top: 1px solid var(--line); }
     <div class="wrap">
       <div class="section-head">
         <span class="eyebrow">Privacy</span>
-        <h2>A children's app that collects nothing.</h2>
+        <h2>What does Spell Trail collect about my child?</h2>
         <p>
-          Not "collects nothing important" — there is no account to collect it against.
+          Nothing. Not "nothing important" — there is no account to collect it against.
           Progress lives in the browser on the device, and that's the whole system.
         </p>
       </div>
@@ -498,6 +666,59 @@ footer { border-top: 1px solid var(--line); }
             Fireflies buy cosmetic trail companions and nothing else. No word, tier, or
             feature is ever gated behind a currency or a purchase.
           </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ---------- faq ---------- -->
+  <!--
+    The answers here are copied word for word into the FAQPage JSON-LD in <head>.
+    scripts/landing-schema.test.js checks that they still match. Edit both, or the test
+    will tell you.
+  -->
+  <section class="section" id="faq" style="padding-top:0">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="eyebrow">Questions parents ask</span>
+        <h2>Is it really free, and is it really ad-free?</h2>
+        <p>
+          The short answers are yes and yes. The longer ones are below, because a lot of
+          "free" spelling sites are free for a week and full of ads afterwards.
+        </p>
+      </div>
+      <div class="grownup faq">
+        <div>
+          <h3>Is Spell Trail really free?</h3>
+          <p>Yes, completely. There is no trial, no subscription, no premium tier, and nothing to unlock. Every word, tier, and question mode is available from the first visit. The code is open source under the AGPL, so that promise can be checked rather than taken on trust.</p>
+        </div>
+        <div>
+          <h3>Are there ads?</h3>
+          <p>No. Spell Trail has no advertising, no ad network, and no third-party scripts. Even the fonts are self-hosted so nothing on the page phones home. The only outside request the app makes is a cookieless page-view count from Cloudflare, which is disclosed on the app's privacy page.</p>
+        </div>
+        <div>
+          <h3>Does my child need an account?</h3>
+          <p>No. There is no sign-up, email, or password. Progress is saved in the browser on the device you use. If you want to move it to another device, a grown-up can ask for an optional backup code.</p>
+        </div>
+        <div>
+          <h3>What ages is Spell Trail for?</h3>
+          <p>The built-in words run from grades 1 to 8, roughly ages 6 to 14, in six tiers from Base Camp to Expedition Peak. Younger or older children can use their own word list, so the app fits whatever list came home from school.</p>
+        </div>
+        <div>
+          <h3>Can I use my child's school spelling list?</h3>
+          <p>Yes. Paste this week's words in, one per line or comma-separated. Spell Trail breaks each word into syllables and writes plausible misspellings for it, so a plain list plays every question mode.</p>
+        </div>
+        <div>
+          <h3>Does it work on an iPad, a Chromebook, or a phone?</h3>
+          <p>Yes. Spell Trail runs in any modern browser with nothing to install. The read-aloud voice comes from the device's own speech synthesis, so it works on iPads, Chromebooks, Android tablets, and laptops.</p>
+        </div>
+        <div>
+          <h3>Can more than one child use it?</h3>
+          <p>Yes. Up to six players share one device, each with separate progress, badges, word lists, and trail companions.</p>
+        </div>
+        <div>
+          <h3>Who makes Spell Trail?</h3>
+          <p>Wishful Coders, a one-person studio in Colorado run by a parent. It builds ad-free, privacy-first apps for families and publishes the code for all of them. Spell Trail is supported by donations, not by advertising or by selling data.</p>
         </div>
       </div>
     </div>
