@@ -145,12 +145,12 @@ describe('mastery ladder', () => {
     expect(needsReview(thenWrong, 'said')).toBe(true)
   })
 
-  it('unlocks the pass-off trail once every word has been spelled', () => {
+  it('unlocks the pass-off trail once every word has been met', () => {
     let progress = newProgress()
     expect(canPassOff(progress, words)).toBe(false)
-    for (const entry of words) progress = awardAnswer(progress, entry.word, true, { mode: 'chunks' }).progress
+    for (const entry of words.slice(0, 2)) progress = awardAnswer(progress, entry.word, false, { mode: 'listen' }).progress
     expect(canPassOff(progress, words)).toBe(false)
-    for (const entry of words) progress = awardAnswer(progress, entry.word, true, { mode: 'type' }).progress
+    progress = awardAnswer(progress, words[2].word, false, { mode: 'listen' }).progress
     expect(canPassOff(progress, words)).toBe(true)
   })
 

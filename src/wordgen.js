@@ -2,6 +2,12 @@
 // every game mode: syllable chunks for building and fill-the-gap, plausible
 // misspellings for listen-and-spot, and a sentence to read it in.
 import { generateDecoys } from './game.js'
+import { WORD_TIERS } from './words.js'
+
+// A parent's list often repeats words the tiers already carry, hand-written
+// sentence and decoys included. Progress is keyed by the word itself, so a
+// word met on a school list and in its tier is one word passed off in both.
+const CURATED = new Map(WORD_TIERS.flatMap((tier) => tier.words).map((entry) => [entry.word, entry]))
 
 const VOWELS = 'aeiouy'
 
@@ -130,11 +136,15 @@ function misspellings(word) {
 export function buildWordEntry(raw, sentence = '') {
   const word = cleanWord(raw)
   if (!word) return null
+  const text = String(sentence || '').trim()
+  const usable = text && new RegExp(`\\b${word}\\b`, 'i').test(text)
+  // Prefer the curated entry: authored decoys beat generated ones, and the
+  // parent's own sentence still wins if they gave one.
+  const curated = CURATED.get(word)
+  if (curated) return { ...curated, sentence: usable ? text : curated.sentence }
   const chunks = syllabify(word)
   const distractors = misspellings(word).slice(0, 2)
-  const text = String(sentence || '').trim()
   // The sentence has to contain the word, or the blanked prompt shows nothing.
-  const usable = text && new RegExp(`\\b${word}\\b`, 'i').test(text)
   const at = Math.max(0, chunks.length - 2)
   return {
     word,

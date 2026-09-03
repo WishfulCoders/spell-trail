@@ -212,7 +212,7 @@ function TrackCard({ track, selected, passed, roundLength, note, passOff, onSele
           </button>
         ) : (
           <p className="passoff-note">
-            Spell every word in a trail to unlock the pass-off — {passOff.remaining} to go.
+            Meet every word in a trail to unlock the pass-off — {passOff.remaining} to go.
           </p>
         )
       ) : null}
@@ -286,7 +286,7 @@ function Home({ profile, selection, source, review, audio, onSelect, onStart, on
                   // a device with no voices does not offer one at all.
                   passOff={audio ? {
                     ready: canPassOff(progress, pack.words),
-                    remaining: counts.new + counts.seen + counts.practicing,
+                    remaining: counts.new,
                     onStart: () => { onSelect({ kind: 'pack', id: pack.id, passOff: true }); onStart() },
                   } : null}
                   onSelect={() => onSelect({ kind: 'pack', id: pack.id })}

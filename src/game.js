@@ -194,10 +194,11 @@ export function masteryCounts(progress, words) {
   return counts
 }
 
-// A list can be passed off once every word on it has been typed right at least
-// once in an ordinary trail. Words already passed do not need to be re-earned.
+// A list can be passed off once every word on it has been met in a trail. One
+// practice session is enough: the pass-off is the test, and a child who wants
+// to try it after a single run through should be allowed to find out.
 export function canPassOff(progress, words) {
-  return words.length > 0 && words.every((entry) => masteryAtLeast(progress, entry.word, 'spelled'))
+  return words.length > 0 && words.every((entry) => masteryAtLeast(progress, entry.word, 'seen'))
 }
 
 // The hardest question a word should be asked, given how well the player

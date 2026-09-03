@@ -92,8 +92,8 @@ Any first-attempt miss, in any mode, knocks a word straight back off `passed` (d
 `new` or wherever its stats land it) — "passed off" has to keep meaning "can spell it
 today", not "could once." A track's progress bar can go backwards by design.
 
-`canPassOff(progress, words)` unlocks a list's pass-off trail once every word on it is
-at least `spelled`. `markWritten(progress, word, passed)` records the grown-up's check-off:
+`canPassOff(progress, words)` unlocks a list's pass-off trail once every word on it has
+been met in a trail (at least `seen`), so one practice session is enough to try it. `markWritten(progress, word, passed)` records the grown-up's check-off:
 ticked stamps the word `passed` and clears it out of review camp; unticked counts as a
 miss (`missedModes.written`) and sends it back into camp, same as any other wrong answer.
 
@@ -151,6 +151,9 @@ lists**.
 
 Grown-ups can type in a weekly spelling list under **Players & word lists**. Entries are
 one per line or comma-separated, and `word: sentence` supplies your own sentence.
+A typed-in word that a tier already carries reuses the curated entry, its hand-written
+decoys and sentence included (the parent's own sentence still wins), and since progress is
+keyed by the word itself it is one word passed off in both places. Otherwise
 `src/wordgen.js` syllabifies each word and generates misspellings so a bare list still
 plays every game mode.
 

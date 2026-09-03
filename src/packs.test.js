@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { blankFor, blankSentence, buildRound, generateDecoys, levelFromXp, supportedModes } from './game.js'
 import { MAX_PACK_WORDS, buildPackWords, buildWordEntry, cleanWord, parseWordList, syllabify } from './wordgen.js'
+import { WORD_TIERS } from './words.js'
 import {
   MAX_NAME_LENGTH,
   MAX_PROFILES,
@@ -374,5 +375,21 @@ describe('editing a player', () => {
     expect(loaded.unlocked).toContain('butterfly')
     expect(loaded.avatar).toBe('butterfly')
     expect(loaded.progress.fireflies).toBe(80)
+  })
+})
+
+describe('pack words that the tiers already carry', () => {
+  it('reuse the curated entry, decoys and sentence included', () => {
+    const [entry] = buildPackWords(['Said'])
+    const curated = WORD_TIERS.flatMap((tier) => tier.words).find((word) => word.word === 'said')
+    expect(entry.sentence).toBe(curated.sentence)
+    expect(entry.distractors).toEqual(curated.distractors)
+    expect(entry.custom).toBeUndefined()
+  })
+
+  it('still prefer the sentence a grown-up typed in', () => {
+    const [entry] = buildPackWords([{ word: 'said', sentence: 'Grandma said to come in.' }])
+    expect(entry.sentence).toBe('Grandma said to come in.')
+    expect(entry.chunks.join('')).toBe('said')
   })
 })

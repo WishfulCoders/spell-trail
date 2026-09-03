@@ -165,6 +165,13 @@ function SpellingInput({ id, label, placeholder, item, onAnswer, feedback }) {
     if (!disabled) setValue((current) => current.slice(0, -1))
   }
 
+  // A tapped key must not take focus from the answer field. If it did, the
+  // next Enter would "click" that key again and add a stray letter to a word
+  // that looked right, instead of submitting it.
+  function keepFocus(event) {
+    event.preventDefault()
+  }
+
   function handleKeyDown(event) {
     if (disabled) return
     if (/^[a-z]$/i.test(event.key)) {
@@ -221,7 +228,9 @@ function SpellingInput({ id, label, placeholder, item, onAnswer, feedback }) {
                   className={`spelling-key ${vowel ? 'is-vowel' : ''}`}
                   type="button"
                   key={letter}
+                  tabIndex={-1}
                   disabled={disabled}
+                  onMouseDown={keepFocus}
                   onClick={() => addCharacter(letter)}
                   aria-label={vowel ? `${letter}, vowel` : undefined}
                 >
@@ -234,7 +243,9 @@ function SpellingInput({ id, label, placeholder, item, onAnswer, feedback }) {
                 className="spelling-key spelling-extra"
                 type="button"
                 key={character}
+                tabIndex={-1}
                 disabled={disabled}
+                onMouseDown={keepFocus}
                 onClick={() => addCharacter(character)}
                 aria-label={character === "'" ? 'Apostrophe' : 'Hyphen'}
               >
@@ -245,7 +256,9 @@ function SpellingInput({ id, label, placeholder, item, onAnswer, feedback }) {
               <button
                 className="spelling-key spelling-delete"
                 type="button"
+                tabIndex={-1}
                 disabled={disabled || !value}
+                onMouseDown={keepFocus}
                 onClick={removeCharacter}
                 aria-label="Delete last letter"
               >
