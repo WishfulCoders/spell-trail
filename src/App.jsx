@@ -17,6 +17,7 @@ import {
   masteryOf,
   newProgress,
   passedCount,
+  passOffWords,
   REVIEW_RECALL_SHARE,
   reviewWords,
   settleLevelUps,
@@ -141,10 +142,13 @@ function resolveSource(selection, profile, review) {
     const pack = profile.packs.find((entry) => entry.id === selection.id)
     // A pass-off is the same word list asked a harder way, so it rides on the
     // selection rather than being a track of its own on the map.
-    if (pack && selection.passOff) {
+    // Only the words still to pass off are on the test — the ones already
+    // passed have been spelled from sound alone and have nothing to prove.
+    const left = pack ? passOffWords(profile.progress, pack.words) : []
+    if (pack && selection.passOff && left.length) {
       return {
         kind: 'pack', id: pack.id, label: `${pack.name} pass-off`, color: profile.color, icon: '📝',
-        words: pack.words, passOff: true,
+        words: left, passOff: true,
       }
     }
     if (pack) return { kind: 'pack', id: pack.id, label: pack.name, color: profile.color, icon: '📝', words: pack.words }
@@ -180,8 +184,9 @@ function Header({ profile, onHome, onSwitch }) {
 // gesture in the same place rather than a trip back to the top of the page.
 // `note` replaces the passed-off bar for a track where that count means nothing
 // — review camp shrinks as words are learned rather than filling up.
-// `passOff` is { ready, remaining, onStart } for a list that can be tested as a
-// whole; leave it out for a track where passing the list off means nothing.
+// `passOff` is { ready, unmet, left, onStart } for a list that can be tested,
+// where `left` is the words still to pass off; leave it out for a track where
+// passing the list off means nothing.
 function TrackCard({ track, selected, passed, roundLength, note, passOff, onSelect, onStart, children }) {
   const total = track.words.length
   const pct = total ? Math.round((passed / total) * 100) : 0
@@ -207,12 +212,17 @@ function TrackCard({ track, selected, passed, roundLength, note, passOff, onSele
         passOff.ready ? (
           <button className="track-start track-passoff" type="button" onClick={passOff.onStart}>
             <span>Pass off this list</span>
-            <b>All {total} words · typed from the sound</b>
+            <b>
+              {passOff.left === total ? `All ${total} words` : `${passOff.left} word${passOff.left === 1 ? '' : 's'} still to pass`}
+              {' · typed from the sound'}
+            </b>
             <i aria-hidden="true">★</i>
           </button>
+        ) : passOff.left === 0 ? (
+          <p className="passoff-note">Every word on this list is passed off. Keep practising to hold on to them.</p>
         ) : (
           <p className="passoff-note">
-            Meet every word in a trail to unlock the pass-off — {passOff.remaining} to go.
+            Meet every word in a trail to unlock the pass-off — {passOff.unmet} to go.
           </p>
         )
       ) : null}
@@ -286,7 +296,8 @@ function Home({ profile, selection, source, review, audio, onSelect, onStart, on
                   // a device with no voices does not offer one at all.
                   passOff={audio ? {
                     ready: canPassOff(progress, pack.words),
-                    remaining: counts.new,
+                    unmet: counts.new,
+                    left: pack.words.length - passedCount(progress, pack.words),
                     onStart: () => { onSelect({ kind: 'pack', id: pack.id, passOff: true }); onStart() },
                   } : null}
                   onSelect={() => onSelect({ kind: 'pack', id: pack.id })}

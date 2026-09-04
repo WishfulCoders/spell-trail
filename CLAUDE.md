@@ -92,8 +92,14 @@ Any first-attempt miss, in any mode, knocks a word straight back off `passed` (d
 `new` or wherever its stats land it) — "passed off" has to keep meaning "can spell it
 today", not "could once." A track's progress bar can go backwards by design.
 
-`canPassOff(progress, words)` unlocks a list's pass-off trail once every word on it has
-been met in a trail (at least `seen`), so one practice session is enough to try it. `markWritten(progress, word, passed)` records the grown-up's check-off:
+`passOffWords(progress, words)` is the list a pass-off trail actually asks: the words not
+already `passed`. A word that has been spelled from sound alone has nothing to prove, and
+retesting it could only knock it back down, so it is left out.
+`canPassOff(progress, words)` unlocks a list's pass-off trail once every word still to pass
+has been met in a trail (at least `seen`), so one practice session is enough to try it; a
+list with nothing left to pass off offers no pass-off at all.
+
+`markWritten(progress, word, passed)` records the grown-up's check-off:
 ticked stamps the word `passed` and clears it out of review camp; unticked counts as a
 miss (`missedModes.written`) and sends it back into camp, same as any other wrong answer.
 

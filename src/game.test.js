@@ -31,6 +31,7 @@ import {
   normalizeProgress,
   needsReview,
   passedCount,
+  passOffWords,
   planModes,
   resolveMode,
   reviewWords,
@@ -152,6 +153,19 @@ describe('mastery ladder', () => {
     expect(canPassOff(progress, words)).toBe(false)
     progress = awardAnswer(progress, words[2].word, false, { mode: 'listen' }).progress
     expect(canPassOff(progress, words)).toBe(true)
+  })
+
+  it('leaves already-passed words out of a pass-off, and offers none once the list is done', () => {
+    let progress = newProgress()
+    for (const entry of words) progress = awardAnswer(progress, entry.word, false, { mode: 'listen' }).progress
+    progress = awardAnswer(progress, words[0].word, true, { mode: 'type', passOff: true }).progress
+    expect(passOffWords(progress, words).map((entry) => entry.word)).toEqual([words[1].word, words[2].word])
+    expect(canPassOff(progress, words)).toBe(true)
+    for (const entry of words.slice(1)) {
+      progress = awardAnswer(progress, entry.word, true, { mode: 'type', passOff: true }).progress
+    }
+    expect(passOffWords(progress, words)).toEqual([])
+    expect(canPassOff(progress, words)).toBe(false)
   })
 
   it('lets a grown-up pass a word off from a written test, and send it back', () => {
