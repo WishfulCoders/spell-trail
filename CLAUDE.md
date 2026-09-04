@@ -100,7 +100,12 @@ miss (`missedModes.written`) and sends it back into camp, same as any other wron
 `modeCeiling(progress, word)` caps how hard a word may be asked, independent of the mode
 plan above: never met → listen or fill-the-gap only; met but never right → up to
 build-the-word; right once → up to memory trail; right twice → typing. This is why a
-child's first meeting with a word is never a blank text box.
+child's first meeting with a word is never a blank text box. A never-met word is also
+flagged `meet` on its round entry, and `Game` shows a "meet a new word" card — the word,
+its sentence with the word picked out, and the audio — before the question itself.
+
+When a typed or built answer is wrong, the feedback shows what the child produced next
+to the right spelling, so a puzzling miss is a visible slip rather than a mystery.
 
 "I don't know" (`unknown: true`) earns no XP — a fair thing to ask for, but not an
 attempt, so it can't be farmed for XP by tapping it repeatedly.

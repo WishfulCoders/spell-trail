@@ -448,6 +448,8 @@ export function buildRound({
   return arranged.map((entry, index) => ({
     ...entry,
     mode: resolveMode(entry, capMode(plan[index], modeCeiling(progress, entry.word)), { audio }),
+    // A word the player has never met is introduced before it is asked.
+    meet: masteryOf(progress, entry.word) === 'new',
   }))
 }
 

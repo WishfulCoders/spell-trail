@@ -221,6 +221,14 @@ describe('mode ceilings', () => {
     expect(round.every((item) => !passedWords.has(item.word))).toBe(true)
   })
 
+  it('flags words the player has never met so the trail can introduce them', () => {
+    const progress = awardAnswer(newProgress(), WORD_TIERS[0].words[0].word, true, { mode: 'listen' }).progress
+    const round = buildRound({ words: WORD_TIERS[0].words.slice(0, 3), length: 3, progress })
+    expect(round.find((item) => item.word === WORD_TIERS[0].words[0].word).meet).toBe(false)
+    expect(round.filter((item) => item.meet)).toHaveLength(2)
+    expect(buildRound({ words: WORD_TIERS[0].words, length: 3 }).every((item) => item.meet === undefined)).toBe(true)
+  })
+
   it('builds a pass-off trail that types every word', () => {
     const round = buildRound({ words: WORD_TIERS[0].words.slice(0, 5), passOff: true })
     expect(round).toHaveLength(5)

@@ -346,6 +346,16 @@ function Home({ profile, selection, source, review, audio, onSelect, onStart, on
   )
 }
 
+// The sentence with the word itself picked out, for the introduction card —
+// the opposite of `blankSentence`, which hides it for a question.
+function highlightWord(sentence, word) {
+  const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const parts = sentence.split(new RegExp(`(${escaped})`, 'i'))
+  return parts.map((part, index) => (part.toLowerCase() === word.toLowerCase()
+    ? <mark key={index}>{part}</mark>
+    : <span key={index}>{part}</span>))
+}
+
 function ListenButton({ word, sentence, audio, voiceUri }) {
   if (!audio) {
     return (
@@ -383,6 +393,9 @@ function Game({ source, progress, roundLength, onProgress, onComplete, onExit, o
   const [retries, setRetries] = useState([])
   const [index, setIndex] = useState(0)
   const [feedback, setFeedback] = useState(null)
+  // Whether the player has tapped through the introduction of a never-met
+  // word. Reset for every question; only questions flagged `meet` use it.
+  const [met, setMet] = useState(false)
   const xpBefore = useRef(progress.xp)
   const missed = useRef(new Set())
   // First attempts only, in the order they were asked, for the round-up on the
@@ -451,6 +464,7 @@ function Game({ source, progress, roundLength, onProgress, onComplete, onExit, o
     }
     setIndex((current) => current + 1)
     setFeedback(null)
+    setMet(false)
   }
 
   const mode = MODE_REGISTRY[item.mode]
@@ -458,6 +472,12 @@ function Game({ source, progress, roundLength, onProgress, onComplete, onExit, o
   // A pass-off asks the same typing question, but it is a test of the whole
   // list rather than a checkpoint inside one, so it says so.
   const heading = passOff ? { ...mode, eyebrow: 'Pass-off', title: 'Spell it from memory' } : mode
+  const meeting = Boolean(item.meet) && !met && !feedback
+  // What the player actually produced, for the modes where that is a word
+  // rather than a pick. Seeing "you typed" next to "the word is" turns a
+  // puzzling miss into a visible slip, for the child and for the grown-up.
+  const typedWrong = feedback && !feedback.isCorrect && feedback.choice !== UNKNOWN_ANSWER
+    && ['type', 'memory', 'chunks'].includes(item.mode) ? feedback.choice : null
   const step = inRetry ? index - base.length + 1 : index + 1
   const total = inRetry ? retries.length : base.length
   const filled = (step - 1 + (feedback ? 1 : 0)) / total
@@ -477,18 +497,36 @@ function Game({ source, progress, roundLength, onProgress, onComplete, onExit, o
             One more look at a word you missed — this one does not change your score.
           </p>
         ) : null}
-        <div className="question-heading">
-          <span className="mode-icon" aria-hidden="true">{heading.icon}</span>
-          <div><span className="soft-label">{heading.eyebrow}</span><h1>{heading.title}</h1></div>
-        </div>
-        <ListenButton word={item.word} sentence={item.sentence} audio={audio} voiceUri={voiceUri} />
-        <p className="sentence"><span>“</span>{blankSentence(item.sentence, item.word)}<span>”</span></p>
-        <div className="question-area">
-          <Question key={index} item={item} onAnswer={answer} feedback={feedback} />
-        </div>
+        {meeting ? (
+          <>
+            <div className="question-heading">
+              <span className="mode-icon" aria-hidden="true">👋</span>
+              <div><span className="soft-label">New word</span><h1>Meet a new word</h1></div>
+            </div>
+            <ListenButton word={item.word} sentence={item.sentence} audio={audio} voiceUri={voiceUri} />
+            <div className="meet-card">
+              <p className="meet-word">{item.word}</p>
+              <p className="meet-sentence"><span>“</span>{highlightWord(item.sentence, item.word)}<span>”</span></p>
+              <p className="memory-hint">Look at how it is spelled, then we will try it together.</p>
+              <button className="check-button" type="button" onClick={() => setMet(true)}>I&apos;m ready →</button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="question-heading">
+              <span className="mode-icon" aria-hidden="true">{heading.icon}</span>
+              <div><span className="soft-label">{heading.eyebrow}</span><h1>{heading.title}</h1></div>
+            </div>
+            <ListenButton word={item.word} sentence={item.sentence} audio={audio} voiceUri={voiceUri} />
+            <p className="sentence"><span>“</span>{blankSentence(item.sentence, item.word)}<span>”</span></p>
+            <div className="question-area">
+              <Question key={index} item={item} onAnswer={answer} feedback={feedback} />
+            </div>
+          </>
+        )}
         {/* No way out of a pass-off: it only means something if every word was
             actually attempted. */}
-        {feedback || passOff ? null : (
+        {feedback || passOff || meeting ? null : (
           <button className="unsure-button" type="button" onClick={() => answer(false, UNKNOWN_ANSWER)}>
             I don&apos;t know this one — show me
           </button>
@@ -507,6 +545,9 @@ function Game({ source, progress, roundLength, onProgress, onComplete, onExit, o
                 <strong>{item.word}</strong>
                 {audio ? <button type="button" onClick={() => speak(item.word, { voiceUri })}>Hear it again</button> : null}
               </p>
+              {typedWrong ? (
+                <p className="answer-line typed-line"><span>You typed</span><strong>{typedWrong}</strong></p>
+              ) : null}
               {feedback.queued ? <small className="queued-note">We will come back to this one before the trail ends.</small> : null}
             </div>
             {feedback.xp ? <div className="xp-pop">+{feedback.xp} XP</div> : null}

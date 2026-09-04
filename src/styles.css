@@ -407,3 +407,10 @@ html { scroll-behavior: smooth; }
 .written-test-row input { width: 18px; height: 18px; flex: none; accent-color: #4f9a74; }
 .written-test-row b { flex: 1; min-width: 0; overflow: hidden; font: 800 13px 'Manrope'; text-overflow: ellipsis; white-space: nowrap; }
 .written-test-row small { margin: 0; color: #6a7a73; font-size: 10px; font-weight: 700; }
+
+.meet-card { display: grid; justify-items: center; gap: 14px; margin-top: 18px; }
+.meet-word { margin: 0; font: 800 44px 'Manrope'; letter-spacing: 2px; color: var(--ink); animation: memory-in .18s ease; }
+.meet-sentence { margin: 0; color: #3f544c; font-size: 16px; text-align: center; }
+.meet-sentence mark { padding: 0 4px; border-radius: 6px; background: #fdecc2; color: var(--ink); font-weight: 800; }
+.meet-card .check-button { min-width: 200px; }
+.typed-line strong { color: #b4713c; text-decoration: line-through; text-decoration-thickness: 2px; }
