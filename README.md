@@ -54,6 +54,9 @@ the only thing that ever leaves the device is a backup a grown-up explicitly ask
   knowing the spelling.
 - **Bring your own list.** A grown-up can paste in this week's school spelling list and
   it plays every game mode — the app syllabifies each word and generates its decoys.
+- **Print it.** Any list — a school list or a built-in tier — prints as a look-say-cover-write
+  practice sheet, a written test with the answer key on its own page, or a plain word list.
+  Once the words are in, practice doesn't need a screen.
 - **Up to six players** on one device, each with their own progress, badges, word lists,
   trail length, and companion.
 - **Fireflies and companions.** One firefly per correct answer, two on a streak. They buy

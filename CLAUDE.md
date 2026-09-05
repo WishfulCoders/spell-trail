@@ -19,8 +19,8 @@ Shipped: six tiers of 64 words, five question modes, a five-rung per-word master
 ladder with a pass-off trail and a written-test check-off, review camp, in-session
 correction, an "I don't know" escape on every question, up to six player profiles,
 parent-entered word lists, firefly-bought companions, backup codes, per-player
-session length, voice selection, a levelling curve with a level-up celebration, and
-a privacy page.
+session length, voice selection, a levelling curve with a level-up celebration,
+printable practice sheets, written tests, and word lists, and a privacy page.
 
 Known gaps, in the order worth fixing:
 
@@ -171,6 +171,19 @@ plays every game mode.
 Each profile remembers `lastSelection`. `defaultSelection` (`src/profiles.js`) opens the
 app on whatever the player picked last, else their newest word list, else Base Camp —
 so a player who's mid-way through a custom list lands back on it rather than the tiers.
+
+## Printing
+
+`src/print.js` is the paper half of the app: `printableLists(profile)` (this player's
+packs first, then the six tiers), `sheetWords` and the three `SHEETS` — a look-say-cover-
+write practice table, a written test whose answer key breaks onto its own page, and a plain
+word list. `PrintSheets` in `App.jsx` is the `#print` view, reached from **Players & word
+lists** (the card, or the Print button on a pack row, which opens on that pack). The
+preview is the same markup the printer gets; `@media print` in `styles.css` only strips the
+app chrome and the controls. A tier narrows to the words met but not yet passed
+(`learningWords`) when the grown-up leaves the box ticked, since all 64 is four pages of
+words the child has mostly passed or never met; a pack always prints whole. Printing
+touches no progress — a marked test is ticked off under **Written test** (`markWritten`).
 
 ## Levelling
 

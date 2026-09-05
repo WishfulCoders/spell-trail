@@ -13,6 +13,7 @@ the AGPL-3.0.
 - Five-minute spelling trails of 3 to 16 words.
 - Six tiers of 64 hand-written words covering grades 1 to 8 (roughly ages 6 to 14).
 - Parents can paste in this week's spelling list from school.
+- Any list prints as a practice sheet, a written test, or a word list, so practice can happen on paper.
 - Five question modes: listen and spot, fill the gap, build the word, memory
   trail, and typing checkpoint.
 - Missed words come back once in the same trail, then wait in review camp until

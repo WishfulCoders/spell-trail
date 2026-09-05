@@ -57,6 +57,7 @@ import { bestVoiceUri, listVoices, onVoicesChanged, speak, speechReady, stopSpea
 import { deleteBackup, loadBackup, saveBackup } from './backup.js'
 import { MAX_PACK_WORDS, buildPackWords, parseEntries } from './wordgen.js'
 import { DEFAULT_TIER_ID, WORD_TIERS } from './words.js'
+import { DEFAULT_SHEET, SHEETS, learningWords, listIdFor, printableLists, sheetWords } from './print.js'
 
 // Chrome fires `voiceschanged` once, often before React has mounted and
 // subscribed — so the event alone leaves the app believing it has no speech.
@@ -76,10 +77,10 @@ export const SUPPORT_EMAIL = 'support@spelltrail.app'
 const VOICE_POLL_MS = 250
 const VOICE_GIVE_UP_MS = 4000
 
-const VIEW_HASHES = { home: '', family: '#grown-ups', rewards: '#rewards', privacy: '#privacy', game: '#trail', complete: '#complete' }
+const VIEW_HASHES = { home: '', family: '#grown-ups', print: '#print', rewards: '#rewards', privacy: '#privacy', game: '#trail', complete: '#complete' }
 
 function viewFromLocation() {
-  const match = Object.entries(VIEW_HASHES).find(([view, hash]) => ['family', 'rewards', 'privacy'].includes(view) && hash === window.location.hash)
+  const match = Object.entries(VIEW_HASHES).find(([view, hash]) => ['family', 'print', 'rewards', 'privacy'].includes(view) && hash === window.location.hash)
   return match?.[0] || 'home'
 }
 
@@ -1227,9 +1228,129 @@ function WrittenTest({ pack, progress, onMarkWritten }) {
   )
 }
 
+// The paper half of the app. A sheet is ordinary markup that the print
+// stylesheet strips down to ink on white, so what is previewed on screen is
+// what comes out of the printer. Nothing here touches progress: after a
+// written test is marked, the grown-up ticks the words off under Written test.
+function Sheet({ kind, list, words, profile }) {
+  const sheet = SHEETS.find((entry) => entry.id === kind)
+  const title = list.kind === 'tier' ? `${list.label} · ${list.grades}` : list.label
+  const entryLine = (entry) => (
+    <li key={entry.word}><b>{entry.word}</b>{entry.sentence ? <span>{entry.sentence}</span> : null}</li>
+  )
+  return (
+    <article className="sheet" aria-label={`${sheet.label} preview`}>
+      <div className="sheet-head">
+        <div>
+          <b>{title}</b>
+          <small>{sheet.label} · Spell Trail · spelltrail.app</small>
+        </div>
+        <div className="sheet-fields">
+          <span>Name: <em>{profile.name}</em></span>
+          <span>Date: <em /></span>
+        </div>
+      </div>
+      {kind === 'practice' ? (
+        <table className="sheet-table">
+          <thead>
+            <tr><th scope="col">Look, say, cover</th><th scope="col">Write it</th><th scope="col">Write it again</th><th scope="col">Once more</th></tr>
+          </thead>
+          <tbody>
+            {words.map((entry) => (
+              <tr key={entry.word}>
+                <th scope="row"><b>{entry.word}</b>{entry.sentence ? <small>{entry.sentence}</small> : null}</th>
+                <td /><td /><td />
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : null}
+      {kind === 'test' ? (
+        <>
+          <p className="sheet-note">Listen to each word, then write it on its line.</p>
+          <ol className={`sheet-lines ${words.length > 14 ? 'two-col' : ''}`}>
+            {words.map((entry) => <li key={entry.word} />)}
+          </ol>
+          <section className="sheet-key">
+            <h2>For the grown-up</h2>
+            <p>
+              This page prints on its own. Read each word, then its sentence, then the word again.
+              {list.kind === 'pack' ? ' Afterwards, tick the words spelled correctly under Written test in the app so review camp knows.' : ''}
+            </p>
+            <ol>{words.map(entryLine)}</ol>
+          </section>
+        </>
+      ) : null}
+      {kind === 'list' ? <ol className="sheet-list">{words.map(entryLine)}</ol> : null}
+      <p className="sheet-foot">{words.length} words · free, ad-free spelling practice at spelltrail.app</p>
+    </article>
+  )
+}
+
+function PrintSheets({ profile, initial, onBack }) {
+  const lists = useMemo(() => printableLists(profile), [profile])
+  const [listId, setListId] = useState(() => listIdFor(initial))
+  const [kind, setKind] = useState(DEFAULT_SHEET)
+  const [onlyLearning, setOnlyLearning] = useState(true)
+  const list = lists.find((entry) => entry.id === listId) || lists[0]
+  const learning = list.kind === 'tier' ? learningWords(profile.progress, list.words) : []
+  const canNarrow = learning.length > 0 && learning.length < list.words.length
+  const words = sheetWords(list, profile.progress, { onlyLearning: canNarrow && onlyLearning })
+  const packs = lists.filter((entry) => entry.kind === 'pack')
+  const tiers = lists.filter((entry) => entry.kind === 'tier')
+  return (
+    <main id="main-content" tabIndex="-1" className="rewards-shell family-shell print-shell">
+      <div className="print-controls">
+        <button className="back-button" type="button" onClick={onBack}>← Players & word lists</button>
+        <div className="rewards-heading">
+          <span className="soft-label">GROWN-UPS</span>
+          <h1>Print a sheet</h1>
+          <p>Practice with a pencil instead of a screen. Pick a list and a sheet, then print.</p>
+        </div>
+        <section className="family-card print-options">
+          <div className="print-row">
+            <label htmlFor="print-list">Word list</label>
+            <select id="print-list" name="print-list" value={list.id} onChange={(event) => setListId(event.target.value)}>
+              {packs.length ? (
+                <optgroup label={`${profile.name}'s lists`}>
+                  {packs.map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}
+                </optgroup>
+              ) : null}
+              <optgroup label="Practice levels">
+                {tiers.map((entry) => <option key={entry.id} value={entry.id}>{entry.label} · {entry.grades}</option>)}
+              </optgroup>
+            </select>
+          </div>
+          <fieldset className="sheet-kinds">
+            <legend>Sheet</legend>
+            {SHEETS.map((sheet) => (
+              <label key={sheet.id} className={`sheet-kind ${kind === sheet.id ? 'selected' : ''}`}>
+                <input type="radio" name="sheet-kind" value={sheet.id} checked={kind === sheet.id} onChange={() => setKind(sheet.id)} />
+                <b>{sheet.label}</b>
+                <small>{sheet.hint}</small>
+              </label>
+            ))}
+          </fieldset>
+          {canNarrow ? (
+            <label className="print-check">
+              <input type="checkbox" name="only-learning" checked={onlyLearning} onChange={(event) => setOnlyLearning(event.target.checked)} />
+              Only the {learning.length} words {profile.name} is still learning, not all {list.words.length}
+            </label>
+          ) : null}
+          <div className="print-actions">
+            <button className="check-button" type="button" onClick={() => window.print()}>Print {words.length} words</button>
+            <span className="field-help">Or choose "Save as PDF" in the print dialog.</span>
+          </div>
+        </section>
+      </div>
+      <Sheet kind={kind} list={list} words={words} profile={profile} />
+    </main>
+  )
+}
+
 function Family({
   store, profile, audio, onBack, onSwitch, onAddProfile, onRemoveProfile, onRename, onPickAvatar,
-  onAddPack, onRemovePack, onSavePack, onResetProfile, onRoundLength, onVoice, onRestoreStore, onShowPrivacy, onDraftChange, onMarkWritten,
+  onAddPack, onRemovePack, onSavePack, onResetProfile, onRoundLength, onVoice, onRestoreStore, onShowPrivacy, onDraftChange, onMarkWritten, onPrint,
 }) {
   const [newName, setNewName] = useState('')
   const [editingId, setEditingId] = useState(null)
@@ -1304,6 +1425,7 @@ function Family({
                 >
                   {testingPack === pack.id ? 'Close test' : 'Written test'}
                 </button>
+                <button className="tiny-button" type="button" onClick={() => onPrint({ kind: 'pack', id: pack.id })}>Print</button>
                 <button className="tiny-button" type="button" onClick={() => setEditingPack(editingPack === pack.id ? null : pack.id)}>
                   {editingPack === pack.id ? 'Close' : 'Edit'}
                 </button>
@@ -1323,6 +1445,15 @@ function Family({
           onCancel={() => setEditingPack(null)}
           onDirtyChange={onDraftChange}
         />
+      </section>
+
+      <section className="family-card">
+        <h2>Print a sheet</h2>
+        <p className="field-help">
+          Practice sheets, written tests, and word lists on paper, from any school list or practice
+          level. Once the words are in, practice does not need a screen.
+        </p>
+        <button className="quiet-button" type="button" onClick={() => onPrint(null)}>Choose a list to print</button>
       </section>
 
       <SessionLength profile={profile} onRoundLength={onRoundLength} />
@@ -1351,6 +1482,9 @@ export default function App() {
   const [levelUps, setLevelUps] = useState([])
   const [gameStarted, setGameStarted] = useState(false)
   const [hasUnsavedPack, setHasUnsavedPack] = useState(false)
+  // Which list the print screen opens on: the one whose Print button was tapped,
+  // else whatever is selected on the trail map.
+  const [printFrom, setPrintFrom] = useState(null)
   const viewRef = useRef(view)
   const gameStartedRef = useRef(gameStarted)
   const unsavedPackRef = useRef(hasUnsavedPack)
@@ -1532,7 +1666,11 @@ export default function App() {
             ...entry,
             progress: markWritten(entry.progress, word, passed),
           })))}
+          onPrint={(from) => { setPrintFrom(from); navigate('print') }}
         />
+      ) : null}
+      {view === 'print' ? (
+        <PrintSheets profile={profile} initial={printFrom || selection} onBack={() => navigate('family')} />
       ) : null}
       {levelUps.length ? <LevelUpModal levelUps={levelUps} onClose={() => setLevelUps([])} /> : null}
       {/* The trail screen has to fit a phone without scrolling, so the footer
